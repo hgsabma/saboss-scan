@@ -33,3 +33,19 @@ def test_unwritable_report_path_exits_with_code_1(monkeypatch, tmp_path, capsys,
 
     assert cli.main(["example.com", "--html", str(missing_folder)]) == 1
     assert "could not save" in capsys.readouterr().err
+
+
+def test_non_ascii_website_text_does_not_crash_legacy_console(monkeypatch):
+    import io
+    import sys
+
+    from conftest import build_report
+
+    report = build_report(headers={"x-frame-options": "ALLOW-FROM https://bücher.例え"})
+    monkeypatch.setattr(cli, "scan_domain", lambda domain: report)
+    legacy = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", legacy)
+
+    assert cli.main(["example.com"]) == 0
+    legacy.flush()
+    assert b"b\xfccher.??" in legacy.buffer.getvalue()

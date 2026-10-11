@@ -87,6 +87,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--html", dest="html_path", metavar="FILE", help="Save a readable HTML report")
     args = parser.parse_args(argv)
 
+    # Text from scanned websites can contain any character. On Windows, output
+    # redirected to a file uses an old encoding that cannot show all of them;
+    # replace those characters with "?" instead of crashing.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
+
     try:
         report = scan_domain(args.domain)
     except InvalidTargetError as exc:
