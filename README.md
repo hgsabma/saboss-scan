@@ -68,6 +68,8 @@ Invalid or unsafe targets are rejected:
 - Domains that resolve to private, loopback or cloud-metadata addresses (for example `localtest.me` → `127.0.0.1`)
 
 Redirects are followed one hop at a time (at most 5), and every hop is checked the same way.
+Each connection goes to the exact IP address that was checked (the name is never looked up twice),
+which prevents DNS-rebinding tricks.
 
 ## How the score works
 
@@ -116,6 +118,7 @@ saboss_scan/
   scanner.py                runs all checks and builds the report
   utils.py                  input validation (which targets are allowed)
   network_safety.py         blocks private/internal IP addresses
+  http_client.py            HTTP requests pinned to a checked IP address
   ssl_checker.py            TLS handshake and certificate details
   headers_checker.py        HTTP security headers and http→https redirect
   dns_checker.py            DNS, SPF, DMARC and DKIM lookups
@@ -136,11 +139,11 @@ Version 0.3.0. Early MVP, command-line only, not production-ready.
 - Transparent, documented scoring; failed checks no longer confused with checks that could not run.
 - Fixed: missing DMARC records were treated as DNS errors; long TXT records were split; `www.` was stripped.
 - Domains resolving to private addresses are blocked; redirects are validated hop by hop.
-- Continuous integration with GitHub Actions; dependencies upgraded (requests 2.32.5, dnspython 2.8.0).
+- Continuous integration with GitHub Actions; dependencies upgraded.
 - HTML reports (`--html`), responsive, light/dark mode, printable.
 - Fixed: SPF was missed on domains with more than 20 TXT records (for example github.com).
+- Connections pinned to the verified IP address (DNS-rebinding protection); `requests` replaced by `urllib3`.
 
 **Known issues / next steps**
-- DNS rebinding: the safety check and the actual connection resolve the name separately.
-  Connections must be pinned to the checked IP address before a public web version.
+- A public web version will additionally need rate limiting, proof of domain ownership and authentication.
 - Translations and a web interface are planned later.

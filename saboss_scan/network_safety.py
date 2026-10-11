@@ -5,10 +5,10 @@ create a public domain whose DNS points to 127.0.0.1, a home router
 (192.168.x.x) or a cloud metadata service (169.254.169.254). This module checks
 the IP addresses a name actually resolves to.
 
-Known limitation: the check and the later connection do two separate DNS
-lookups, so a hostile DNS server could answer differently the second time
-("DNS rebinding"). Before Saboss Scan runs as a web service, connections must
-be pinned to the checked IP address.
+To prevent "DNS rebinding" (a hostile DNS server answering differently on a
+second lookup), connections use resolve_public_ip(): the name is resolved once,
+checked, and the connection goes to exactly that address (see http_client.py
+and ssl_checker.py).
 """
 from __future__ import annotations
 
@@ -50,6 +50,20 @@ def ensure_public_addresses(hostname: str, addresses: list[str]) -> None:
             f"'{hostname}' points to a private or reserved address ({', '.join(blocked)}) "
             "and cannot be scanned."
         )
+
+
+def resolve_public_ip(hostname: str) -> str | None:
+    """Resolve a hostname once and return ONE verified public IP to connect to.
+
+    Raises UnsafeTargetError if any address is not public. Returns None if the
+    name does not resolve. IPv4 is preferred because it works on more networks.
+    """
+    addresses = resolve_addresses(hostname)
+    ensure_public_addresses(hostname, addresses)
+    if not addresses:
+        return None
+    ipv4 = [address for address in addresses if ":" not in address]
+    return (ipv4 or addresses)[0]
 
 
 def ensure_public_target(hostname: str) -> list[str]:

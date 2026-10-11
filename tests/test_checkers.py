@@ -10,6 +10,7 @@ import dns.resolver
 import pytest
 
 from saboss_scan import dns_checker, ssl_checker
+from saboss_scan.network_safety import UnsafeTargetError
 
 
 # --- DNS -----------------------------------------------------------------
@@ -67,6 +68,11 @@ def test_spf_is_only_matched_at_the_start_of_a_record():
 
 # --- TLS -----------------------------------------------------------------
 
+@pytest.fixture
+def fake_public_ip(monkeypatch):
+    monkeypatch.setattr(ssl_checker, "resolve_public_ip", lambda domain: "192.0.2.10")
+
+
 @pytest.mark.parametrize(
     ("exception", "expected_type"),
     [
@@ -77,7 +83,7 @@ def test_spf_is_only_matched_at_the_start_of_a_record():
         (OSError(), "network"),
     ],
 )
-def test_ssl_errors_are_classified(monkeypatch, exception, expected_type):
+def test_ssl_errors_are_classified(monkeypatch, fake_public_ip, exception, expected_type):
     def fake_connect(*args, **kwargs):
         raise exception
 
@@ -85,3 +91,32 @@ def test_ssl_errors_are_classified(monkeypatch, exception, expected_type):
     result = ssl_checker.check_ssl("example.com")
     assert result["error_type"] == expected_type
     assert result["certificate_valid"] is False
+
+
+def test_ssl_connects_to_the_checked_ip_not_the_name(monkeypatch, fake_public_ip):
+    addresses = []
+
+    def fake_connect(address, timeout):
+        addresses.append(address)
+        raise ConnectionRefusedError()
+
+    monkeypatch.setattr(ssl_checker.socket, "create_connection", fake_connect)
+    ssl_checker.check_ssl("example.com")
+    assert addresses == [("192.0.2.10", 443)]
+
+
+def test_ssl_check_is_blocked_for_private_address(monkeypatch):
+    def private(domain):
+        raise UnsafeTargetError("private")
+
+    def must_not_connect(*args, **kwargs):
+        raise AssertionError("connected to a private address")
+
+    monkeypatch.setattr(ssl_checker, "resolve_public_ip", private)
+    monkeypatch.setattr(ssl_checker.socket, "create_connection", must_not_connect)
+    assert ssl_checker.check_ssl("example.com")["error_type"] == "blocked"
+
+
+def test_unresolvable_domain_is_a_dns_error(monkeypatch):
+    monkeypatch.setattr(ssl_checker, "resolve_public_ip", lambda domain: None)
+    assert ssl_checker.check_ssl("example.com")["error_type"] == "dns"

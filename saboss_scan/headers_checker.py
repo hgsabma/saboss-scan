@@ -3,18 +3,10 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import urljoin
 
-import requests
-
-from . import __version__
-from .network_safety import ensure_public_target
+from .http_client import FetchError, HttpResponse, fetch
 from .utils import InvalidTargetError, normalize_domain
 
-USER_AGENT = f"SabossScan/{__version__}"
 MAX_REDIRECTS = 5
-
-
-class UnsafeRedirectError(Exception):
-    """A redirect pointed somewhere the scanner must not go."""
 
 SECURITY_HEADERS: dict[str, str] = {
     "strict-transport-security": "HSTS forces browsers to use HTTPS.",
@@ -26,54 +18,38 @@ SECURITY_HEADERS: dict[str, str] = {
 }
 
 
-def _describe_request_error(exc: requests.RequestException) -> str:
-    """Short, user-friendly description that does not dump internals."""
-    if isinstance(exc, requests.Timeout):
-        return "The request timed out."
-    if isinstance(exc, requests.exceptions.SSLError):
-        return "TLS/certificate error."
-    if isinstance(exc, requests.ConnectionError):
-        return "Could not connect."
-    return f"Request failed ({type(exc).__name__})."
+class UnsafeRedirectError(Exception):
+    """A redirect pointed somewhere the scanner must not go."""
 
 
 def _check_redirect_target(url: str) -> None:
-    """Allow a redirect only to a public http(s) website on the default ports."""
+    """Allow a redirect only to a valid public domain on the default ports.
+
+    The IP address of the target is checked by fetch() when it connects.
+    """
     try:
-        hostname = normalize_domain(url)
-        ensure_public_target(hostname)
+        normalize_domain(url)
     except InvalidTargetError:
         raise UnsafeRedirectError(f"Stopped at a redirect to a non-public or invalid address: {url}") from None
 
 
-def _get_following_safe_redirects(url: str, timeout: int) -> requests.Response:
-    """GET a URL, following redirects one by one and checking each target.
-
-    requests can follow redirects automatically, but then it would visit any
-    address the website points to, including internal ones. Doing it by hand
-    lets us validate every hop.
-    """
+def _get_following_safe_redirects(url: str, timeout: float) -> HttpResponse:
+    """GET a URL, following redirects one by one and checking each target."""
     for _ in range(MAX_REDIRECTS + 1):
-        # stream=True: read the headers only, never download the page body.
-        response = requests.get(
-            url,
-            timeout=timeout,
-            allow_redirects=False,
-            stream=True,
-            headers={"User-Agent": USER_AGENT},
-        )
-        response.close()
-        location = response.headers.get("location")
-        if not (response.is_redirect and location):
+        try:
+            response = fetch(url, timeout)
+        except InvalidTargetError:
+            raise UnsafeRedirectError(f"Stopped at a redirect to a non-public or invalid address: {url}") from None
+        if not response.is_redirect:
             return response
-        url = urljoin(url, location)
+        url = urljoin(url, response.location)
         _check_redirect_target(url)
     raise UnsafeRedirectError(f"Too many redirects (more than {MAX_REDIRECTS}).")
 
 
-def check_headers(domain: str, timeout: int = 5) -> dict[str, Any]:
+def check_headers(domain: str, timeout: float = 5) -> dict[str, Any]:
     """Check common HTTP security headers for a website."""
-    url = f"https://{domain}"
+    url = f"https://{domain}/"
     result: dict[str, Any] = {
         "url_checked": url,
         "final_url": None,
@@ -86,23 +62,19 @@ def check_headers(domain: str, timeout: int = 5) -> dict[str, Any]:
 
     try:
         response = _get_following_safe_redirects(url, timeout)
-        lowered_headers = {key.lower(): value for key, value in response.headers.items()}
-        result["final_url"] = response.url
-        result["status_code"] = response.status_code
-
-        result["headers"] = {key: lowered_headers.get(key) for key in SECURITY_HEADERS}
-        result["present"] = [key for key in SECURITY_HEADERS if key in lowered_headers]
-        result["missing"] = [key for key in SECURITY_HEADERS if key not in lowered_headers]
-
-    except requests.RequestException as exc:
-        result["error"] = _describe_request_error(exc)
-    except UnsafeRedirectError as exc:
+    except (FetchError, UnsafeRedirectError) as exc:
         result["error"] = str(exc)
+        return result
 
+    result["final_url"] = response.url
+    result["status_code"] = response.status_code
+    result["headers"] = {key: response.headers.get(key) for key in SECURITY_HEADERS}
+    result["present"] = [key for key in SECURITY_HEADERS if key in response.headers]
+    result["missing"] = [key for key in SECURITY_HEADERS if key not in response.headers]
     return result
 
 
-def check_http_redirect(domain: str, timeout: int = 5) -> dict[str, Any]:
+def check_http_redirect(domain: str, timeout: float = 5) -> dict[str, Any]:
     """Check whether http:// immediately redirects to https://.
 
     The redirect is NOT followed; we only read where it points.
@@ -117,24 +89,16 @@ def check_http_redirect(domain: str, timeout: int = 5) -> dict[str, Any]:
     }
 
     try:
-        with requests.get(
-            url,
-            timeout=timeout,
-            allow_redirects=False,
-            stream=True,
-            headers={"User-Agent": USER_AGENT},
-        ) as response:
-            result["status_code"] = response.status_code
-            location = response.headers.get("location")
+        response = fetch(url, timeout)
+    except (FetchError, InvalidTargetError) as exc:
+        result["error"] = str(exc)
+        return result
 
-        if response.is_redirect and location:
-            absolute = urljoin(url, location)
-            result["location"] = absolute
-            result["redirects_to_https"] = absolute.lower().startswith("https://")
-        else:
-            result["redirects_to_https"] = False
-
-    except requests.RequestException as exc:
-        result["error"] = _describe_request_error(exc)
-
+    result["status_code"] = response.status_code
+    if response.is_redirect:
+        absolute = urljoin(url, response.location)
+        result["location"] = absolute
+        result["redirects_to_https"] = absolute.lower().startswith("https://")
+    else:
+        result["redirects_to_https"] = False
     return result

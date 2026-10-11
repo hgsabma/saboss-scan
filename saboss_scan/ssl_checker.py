@@ -5,6 +5,8 @@ import ssl
 from datetime import datetime, timezone
 from typing import Any
 
+from .network_safety import UnsafeTargetError, resolve_public_ip
+
 
 CERT_DATE_FORMAT = "%b %d %H:%M:%S %Y %Z"
 
@@ -28,6 +30,7 @@ def check_ssl(domain: str, timeout: int = 5) -> dict[str, Any]:
         tls          the TLS handshake failed (e.g. outdated protocol)
         refused      nothing is listening on port 443
         dns          the name could not be resolved
+        blocked      the name resolved to a private/internal address
         timeout      no answer in time (cannot tell if HTTPS exists)
         network      another network problem
     """
@@ -44,8 +47,15 @@ def check_ssl(domain: str, timeout: int = 5) -> dict[str, Any]:
     }
 
     try:
+        # Resolve once, check the address, and connect to exactly that address
+        # (see network_safety.py for why). The certificate is still verified
+        # for the domain name through server_hostname.
+        ip = resolve_public_ip(domain)
+        if ip is None:
+            raise socket.gaierror("could not resolve")
+
         context = ssl.create_default_context()
-        with socket.create_connection((domain, 443), timeout=timeout) as sock:
+        with socket.create_connection((ip, 443), timeout=timeout) as sock:
             with context.wrap_socket(sock, server_hostname=domain) as secure_sock:
                 cert = secure_sock.getpeercert()
                 result["tls_version"] = secure_sock.version()
@@ -63,6 +73,9 @@ def check_ssl(domain: str, timeout: int = 5) -> dict[str, Any]:
             result["days_until_expiry"] = max((expires - now).days, 0)
 
     # Order matters: the more specific exception types must come first.
+    except UnsafeTargetError:
+        result["error_type"] = "blocked"
+        result["error"] = "Not checked: the domain resolved to a private or reserved address."
     except ssl.SSLCertVerificationError as exc:
         result["https"] = True
         result["error_type"] = "certificate"
