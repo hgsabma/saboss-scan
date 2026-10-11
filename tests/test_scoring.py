@@ -52,3 +52,10 @@ def test_category_breakdown():
     score = calculate_score([make("pass", "high", "tls"), make("fail", "low", "email")])
     assert score["categories"]["tls"] == {"earned": 10, "possible": 10}
     assert score["categories"]["email"] == {"earned": 0, "possible": 2}
+
+
+def test_whole_points_are_shown_without_decimals():
+    score = calculate_score([make("pass", "high"), make("warning", "low")])
+    assert score["earned"] == 11 and isinstance(score["earned"], int)
+    score = calculate_score([make("warning", "medium")])
+    assert score["earned"] == 2.5

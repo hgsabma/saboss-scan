@@ -43,13 +43,25 @@ pip install -r requirements.txt
 python main.py example.com
 ```
 
-Save the full report as JSON:
+Save a readable HTML report (open it in any browser, or share it with the site owner):
 
 ```bash
-python main.py example.com --json report.json
+python main.py example.com --html reports/example.html
 ```
 
-Invalid or unsafe targets are rejected with exit code `2`:
+Save the full report as JSON (for other tools):
+
+```bash
+python main.py example.com --json reports/example.json
+```
+
+The `reports/` folder is ignored by Git, so reports about real domains are never committed by accident.
+The HTML report is a single file with no scripts or external resources; every value from the scanned
+site is escaped, so a hostile website cannot inject code into the report.
+
+Exit codes: `0` scan completed, `1` report could not be saved, `2` invalid or unsafe target.
+
+Invalid or unsafe targets are rejected:
 
 - IP addresses, `localhost` and internal names such as `.local`/`.internal`
 - URLs with passwords or custom ports
@@ -110,12 +122,13 @@ saboss_scan/
   findings.py               turns raw results into findings (the rules)
   scoring.py                Saboss Security Score
   recommendations.py        prioritized advice
+  html_report.py            self-contained HTML report
 tests/                      automated tests
 ```
 
 ## Project status
 
-Version 0.2.0. Early MVP, command-line only, not production-ready.
+Version 0.3.0. Early MVP, command-line only, not production-ready.
 
 **Done**
 - Input validation that rejects IPs, local/reserved names, credentials and custom ports.
@@ -124,8 +137,10 @@ Version 0.2.0. Early MVP, command-line only, not production-ready.
 - Fixed: missing DMARC records were treated as DNS errors; long TXT records were split; `www.` was stripped.
 - Domains resolving to private addresses are blocked; redirects are validated hop by hop.
 - Continuous integration with GitHub Actions; dependencies upgraded (requests 2.32.5, dnspython 2.8.0).
+- HTML reports (`--html`), responsive, light/dark mode, printable.
+- Fixed: SPF was missed on domains with more than 20 TXT records (for example github.com).
 
 **Known issues / next steps**
 - DNS rebinding: the safety check and the actual connection resolve the name separately.
   Connections must be pinned to the checked IP address before a public web version.
-- HTML reports, translations and a web interface are planned later.
+- Translations and a web interface are planned later.

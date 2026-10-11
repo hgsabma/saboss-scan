@@ -24,7 +24,13 @@ def _record_to_text(record: Any) -> str:
     return text.strip().strip('"')
 
 
-def _resolve(dns_resolver: Any, name: str, record_type: str, limit: int = 20) -> list[str]:
+# Upper bound to keep reports a sane size. Must be generous: large companies
+# often have 20+ TXT records (domain verifications), and the SPF record can be
+# any one of them.
+MAX_RECORDS = 200
+
+
+def _resolve(dns_resolver: Any, name: str, record_type: str, limit: int = MAX_RECORDS) -> list[str]:
     resolver = dns_resolver.Resolver(configure=False)
     resolver.nameservers = PUBLIC_DNS_SERVERS
     resolver.timeout = 3

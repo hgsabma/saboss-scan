@@ -43,6 +43,23 @@ def test_dns_timeout_is_reported_as_error(monkeypatch):
     assert result["errors"]["dmarc"] == "DNS lookup timed out."
 
 
+def test_spf_is_found_among_many_txt_records():
+    # Regression: github.com has 24 TXT records with SPF last; an old limit of 20 hid it.
+    texts = [f'"verification-token-{i}"' for i in range(30)] + ['"v=spf1 include:_spf.example.com -all"']
+    records = [dns.rdata.from_text(dns.rdataclass.IN, dns.rdatatype.TXT, text) for text in texts]
+
+    class FakeResolverModule:
+        class Resolver:
+            def __init__(self, configure):
+                pass
+
+            def resolve(self, name, record_type, raise_on_no_answer):
+                return records
+
+    txt = dns_checker._resolve(FakeResolverModule, "example.com", "TXT")
+    assert dns_checker._find_spf(txt) == ["v=spf1 include:_spf.example.com -all"]
+
+
 def test_spf_is_only_matched_at_the_start_of_a_record():
     records = ["v=spf1 -all", "google-site-verification=abc v=spf1"]
     assert dns_checker._find_spf(records) == ["v=spf1 -all"]

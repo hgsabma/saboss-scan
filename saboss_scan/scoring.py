@@ -23,6 +23,12 @@ GRADE_THRESHOLDS = [(85, "A"), (70, "B"), (55, "C"), (40, "D")]
 HIGH_RISK_GRADE_CAP = "D"
 
 
+def _points(value: float) -> int | float:
+    """25.0 -> 25, 12.5 -> 12.5 (whole numbers read better in reports)."""
+    rounded = round(value, 1)
+    return int(rounded) if rounded.is_integer() else rounded
+
+
 def _grade_for(percentage: int) -> str:
     for threshold, grade in GRADE_THRESHOLDS:
         if percentage >= threshold:
@@ -60,7 +66,7 @@ def calculate_score(findings: list[Finding]) -> dict[str, Any]:
             grade = HIGH_RISK_GRADE_CAP
 
     return {
-        "earned": round(earned, 1),
+        "earned": _points(earned),
         "possible": possible,
         "percentage": percentage,
         "grade": grade,
@@ -69,7 +75,7 @@ def calculate_score(findings: list[Finding]) -> dict[str, Any]:
         "checks_total": len(findings),
         "complete": checks_completed == len(findings),
         "categories": {
-            name: {"earned": round(values["earned"], 1), "possible": values["possible"]}
+            name: {"earned": _points(values["earned"]), "possible": values["possible"]}
             for name, values in categories.items()
         },
     }

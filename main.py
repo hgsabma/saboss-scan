@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from saboss_scan.html_report import render_html
 from saboss_scan.scanner import scan_domain
 from saboss_scan.utils import InvalidTargetError
 
@@ -61,24 +62,45 @@ def print_summary(report: dict) -> None:
     print("=============================================\n")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Saboss Scan - simple domain security scanner")
+def _save(path_text: str, content: str, label: str) -> bool:
+    path = Path(path_text)
+    try:
+        path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: could not save the {label} report to {path}: {exc.strerror}", file=sys.stderr)
+        return False
+    print(f"Saved {label} report to: {path}")
+    return True
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the command-line interface and return the exit code.
+
+    Exit codes: 0 = scan completed, 1 = report could not be saved,
+    2 = invalid or unsafe target.
+    """
+    parser = argparse.ArgumentParser(
+        description="Saboss Scan - passive security check for a domain you own or may assess."
+    )
     parser.add_argument("domain", help="Domain to scan, for example example.com")
-    parser.add_argument("--json", dest="json_path", help="Save full report as JSON file")
-    args = parser.parse_args()
+    parser.add_argument("--json", dest="json_path", metavar="FILE", help="Save the full report as JSON")
+    parser.add_argument("--html", dest="html_path", metavar="FILE", help="Save a readable HTML report")
+    args = parser.parse_args(argv)
 
     try:
         report = scan_domain(args.domain)
     except InvalidTargetError as exc:
         print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(2)
+        return 2
     print_summary(report)
 
+    saved = True
     if args.json_path:
-        path = Path(args.json_path)
-        path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-        print(f"Saved JSON report to: {path}")
+        saved &= _save(args.json_path, json.dumps(report, indent=2, ensure_ascii=False), "JSON")
+    if args.html_path:
+        saved &= _save(args.html_path, render_html(report), "HTML")
+    return 0 if saved else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
