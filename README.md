@@ -1,5 +1,7 @@
 # Saboss Scan
 
+[![Tests](https://github.com/hgsabma/saboss-scan/actions/workflows/tests.yml/badge.svg)](https://github.com/hgsabma/saboss-scan/actions/workflows/tests.yml)
+
 Saboss Scan is a passive security check for websites and domains, built by Saboss Technologies.
 It looks at publicly visible configuration and explains, in plain language, what to improve.
 
@@ -47,8 +49,13 @@ Save the full report as JSON:
 python main.py example.com --json report.json
 ```
 
-Invalid or unsafe targets (IP addresses, `localhost`, internal names such as `.local`/`.internal`,
-URLs with passwords or custom ports) are rejected with exit code `2`.
+Invalid or unsafe targets are rejected with exit code `2`:
+
+- IP addresses, `localhost` and internal names such as `.local`/`.internal`
+- URLs with passwords or custom ports
+- Domains that resolve to private, loopback or cloud-metadata addresses (for example `localtest.me` → `127.0.0.1`)
+
+Redirects are followed one hop at a time (at most 5), and every hop is checked the same way.
 
 ## How the score works
 
@@ -77,11 +84,17 @@ Every check produces a **finding** with a fixed severity and an outcome.
 
 ## Development
 
-Run the tests (they make no network requests):
+Install the development tools and run the tests (they make no network requests):
+
+```bash
+pip install -r requirements-dev.txt
+```
 
 ```bash
 python -m pytest
 ```
+
+GitHub Actions runs the same tests on Python 3.10–3.13 for every push to `main` and every pull request.
 
 Project layout:
 
@@ -90,6 +103,7 @@ main.py                     command-line interface
 saboss_scan/
   scanner.py                runs all checks and builds the report
   utils.py                  input validation (which targets are allowed)
+  network_safety.py         blocks private/internal IP addresses
   ssl_checker.py            TLS handshake and certificate details
   headers_checker.py        HTTP security headers and http→https redirect
   dns_checker.py            DNS, SPF, DMARC and DKIM lookups
@@ -108,9 +122,10 @@ Version 0.2.0. Early MVP, command-line only, not production-ready.
 - Findings with severity and pass/warning/fail/not-checked outcomes.
 - Transparent, documented scoring; failed checks no longer confused with checks that could not run.
 - Fixed: missing DMARC records were treated as DNS errors; long TXT records were split; `www.` was stripped.
+- Domains resolving to private addresses are blocked; redirects are validated hop by hop.
+- Continuous integration with GitHub Actions; dependencies upgraded (requests 2.32.5, dnspython 2.8.0).
 
 **Known issues / next steps**
-- Domains that *resolve* to private IP addresses are not yet blocked (required before any web version).
-- No continuous integration (GitHub Actions) yet.
-- `requests` should be upgraded to 2.32.4+ (security advisory CVE-2024-47081).
+- DNS rebinding: the safety check and the actual connection resolve the name separately.
+  Connections must be pinned to the checked IP address before a public web version.
 - HTML reports, translations and a web interface are planned later.
