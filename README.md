@@ -1,113 +1,116 @@
 # Saboss Scan
 
-Saboss Scan är en första fungerande MVP för en enkel domän- och webbplatssäkerhetsscanner.
+Saboss Scan is a passive security check for websites and domains, built by Saboss Technologies.
+It looks at publicly visible configuration and explains, in plain language, what to improve.
 
-Den kontrollerar:
+> Only scan domains you own or have explicit permission to assess.
 
-- SSL/TLS-certifikat
-- HTTP Security Headers
-- DNS-records
-- SPF, DMARC och en enkel DKIM-best-effort
-- Security Score
-- Rekommendationer på enkel svenska
+## What it checks
 
-> Använd endast scannern på domäner du äger eller har tillstånd att kontrollera.
+| Category | Checks |
+|---|---|
+| HTTPS / TLS | HTTPS available, trusted certificate, certificate expiry, http:// → https:// redirect |
+| HTTP security headers | HSTS (incl. max-age), Content-Security-Policy (incl. unsafe scripts), clickjacking protection, `nosniff`, Referrer-Policy, Permissions-Policy |
+| DNS | Domain resolves, IPv6 available |
+| E-mail security | SPF (incl. `+all`, multiple records), DMARC policy (`none`/`quarantine`/`reject`), DKIM (common selectors only) |
 
-## 1. Installera
+All checks are ordinary requests that any browser or mail server would make. Nothing is attacked or brute-forced.
 
-Öppna projektet i VS Code och kör:
+## Installation
+
+Requires Python 3.10 or newer.
 
 ```bash
 python -m venv .venv
 ```
 
-Aktivera virtual environment:
+Activate the virtual environment:
 
-Windows PowerShell:
+- Windows PowerShell: `.venv\Scripts\Activate.ps1`
+- macOS/Linux: `source .venv/bin/activate`
 
-```bash
-.venv\Scripts\Activate.ps1
-```
-
-Mac/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-Installera paketen:
+Install the dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 2. Kör en scan
+## Usage
 
 ```bash
 python main.py example.com
 ```
 
-Spara rapport som JSON:
+Save the full report as JSON:
 
 ```bash
 python main.py example.com --json report.json
 ```
 
-## 3. Lägg upp på GitHub
+Invalid or unsafe targets (IP addresses, `localhost`, internal names such as `.local`/`.internal`,
+URLs with passwords or custom ports) are rejected with exit code `2`.
+
+## How the score works
+
+Every check produces a **finding** with a fixed severity and an outcome.
+
+| Severity | Points |   | Outcome | Credit |
+|---|---|---|---|---|
+| high | 10 |   | pass | 100% |
+| medium | 5 |   | warning | 50% |
+| low | 2 |   | fail | 0% |
+| info | 0 (shown, not scored) |   | not checked | left out of the score |
+
+- **Score** = earned points ÷ possible points.
+- **Grades:** A ≥ 85%, B ≥ 70%, C ≥ 55%, D ≥ 40%, otherwise E.
+- A failed **high**-severity check (for example no HTTPS or an untrusted certificate) caps the grade at **D**.
+- If a check could not run (for example a timeout), it is shown as `N/A` and not counted against the site.
+  The report always shows how many checks were completed.
+
+## Scope and limitations
+
+- This is an external check of public configuration. It does not test application code,
+  login pages, servers or internal networks.
+- **A high score does not mean a website is secure.** It means the checked settings follow common best practices.
+- Only the homepage over HTTPS is checked; other pages may send different headers.
+- DKIM can only be found when a common selector name is used.
+
+## Development
+
+Run the tests (they make no network requests):
 
 ```bash
-git init
-git add .
-git commit -m "first version of saboss scan"
-git branch -M main
-git remote add origin https://github.com/DITT-NAMN/saboss-scan.git
-git push -u origin main
+python -m pytest
 ```
 
-## 4. Projektstruktur
+Project layout:
 
 ```text
-saboss-scan/
-├── main.py
-├── requirements.txt
-├── README.md
-├── saboss_scan/
-│   ├── scanner.py
-│   ├── ssl_checker.py
-│   ├── headers_checker.py
-│   ├── dns_checker.py
-│   ├── scoring.py
-│   ├── recommendations.py
-│   └── utils.py
-└── tests/
-    └── test_scoring.py
+main.py                     command-line interface
+saboss_scan/
+  scanner.py                runs all checks and builds the report
+  utils.py                  input validation (which targets are allowed)
+  ssl_checker.py            TLS handshake and certificate details
+  headers_checker.py        HTTP security headers and http→https redirect
+  dns_checker.py            DNS, SPF, DMARC and DKIM lookups
+  findings.py               turns raw results into findings (the rules)
+  scoring.py                Saboss Security Score
+  recommendations.py        prioritized advice
+tests/                      automated tests
 ```
 
-## 5. Viktiga filer
+## Project status
 
-### main.py
-Startfilen. Tar emot domänen från terminalen och skriver ut resultatet.
+Version 0.2.0. Early MVP, command-line only, not production-ready.
 
-### scanner.py
-Kör hela scannen genom att anropa SSL, headers, DNS, scoring och recommendations.
+**Done**
+- Input validation that rejects IPs, local/reserved names, credentials and custom ports.
+- Findings with severity and pass/warning/fail/not-checked outcomes.
+- Transparent, documented scoring; failed checks no longer confused with checks that could not run.
+- Fixed: missing DMARC records were treated as DNS errors; long TXT records were split; `www.` was stripped.
 
-### ssl_checker.py
-Ansluter till port 443 och läser certifikatet.
-
-### headers_checker.py
-Hämtar webbplatsen och kontrollerar viktiga säkerhetsheaders.
-
-### dns_checker.py
-Kontrollerar A, AAAA, MX, TXT, SPF, DMARC och vanliga DKIM-selectors.
-
-### scoring.py
-Räknar ut Saboss Security Score.
-
-### recommendations.py
-Skapar enkla rekommendationer baserat på problemen som hittades.
-
-## 6. Testa koden
-
-```bash
-pytest
-```
+**Known issues / next steps**
+- Domains that *resolve* to private IP addresses are not yet blocked (required before any web version).
+- No continuous integration (GitHub Actions) yet.
+- `requests` should be upgraded to 2.32.4+ (security advisory CVE-2024-47081).
+- HTML reports, translations and a web interface are planned later.

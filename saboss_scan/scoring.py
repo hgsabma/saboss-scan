@@ -1,101 +1,75 @@
+"""Saboss Security Score.
+
+How the score works (kept simple so it can be explained to customers):
+
+1. Every finding has a weight based on its severity:
+   high = 10, medium = 5, low = 2, info = 0 (shown, but not scored).
+2. pass earns the full weight, warning earns half, fail earns nothing.
+3. Checks that could not run ("not_checked") are left out completely,
+   so a timeout never counts as a security problem. The report shows how
+   many checks actually ran.
+4. percentage = earned points / possible points.
+5. Any failed high-severity check caps the grade at D.
+"""
 from __future__ import annotations
 
 from typing import Any
 
+from .findings import FAIL, HIGH, NOT_CHECKED, Finding
 
-HEADER_POINTS = 5
-MAX_POINTS = {
-    "ssl": 25,
-    "headers": 30,
-    "dns": 20,
-    "website_health": 10,
-    "email_security": 15,
-}
+SEVERITY_WEIGHTS = {"high": 10, "medium": 5, "low": 2, "info": 0}
+STATUS_CREDIT = {"pass": 1.0, "warning": 0.5, "fail": 0.0}
+GRADE_THRESHOLDS = [(85, "A"), (70, "B"), (55, "C"), (40, "D")]
+HIGH_RISK_GRADE_CAP = "D"
 
 
-def _score_ssl(ssl_result: dict[str, Any]) -> int:
-    score = 0
-    if ssl_result.get("https"):
-        score += 5
-    if ssl_result.get("certificate_valid"):
-        score += 15
-    days = ssl_result.get("days_until_expiry")
-    if isinstance(days, int) and days >= 30:
-        score += 5
-    return min(score, MAX_POINTS["ssl"])
+def _grade_for(percentage: int) -> str:
+    for threshold, grade in GRADE_THRESHOLDS:
+        if percentage >= threshold:
+            return grade
+    return "E"
 
 
-def _score_headers(headers_result: dict[str, Any]) -> int:
-    present_headers = headers_result.get("present", [])
-    return min(len(present_headers) * HEADER_POINTS, MAX_POINTS["headers"])
+def calculate_score(findings: list[Finding]) -> dict[str, Any]:
+    """Calculate the Saboss Security Score from a list of findings."""
+    categories: dict[str, dict[str, float]] = {}
+    earned = 0.0
+    possible = 0
 
+    for finding in findings:
+        category = categories.setdefault(finding.category, {"earned": 0.0, "possible": 0})
+        if finding.status == NOT_CHECKED:
+            continue
+        weight = SEVERITY_WEIGHTS[finding.severity]
+        points = weight * STATUS_CREDIT[finding.status]
+        category["earned"] += points
+        category["possible"] += weight
+        earned += points
+        possible += weight
 
-def _score_dns(dns_result: dict[str, Any]) -> int:
-    score = 0
-    if dns_result.get("a"):
-        score += 6
-    if dns_result.get("aaaa"):
-        score += 4
-    if dns_result.get("mx"):
-        score += 4
-    if dns_result.get("txt"):
-        score += 3
-    if not dns_result.get("errors"):
-        score += 3
-    return min(score, MAX_POINTS["dns"])
+    checks_completed = sum(1 for finding in findings if finding.status != NOT_CHECKED)
+    high_risk_failed = any(f.severity == HIGH and f.status == FAIL for f in findings)
 
-
-def _score_website_health(headers_result: dict[str, Any]) -> int:
-    score = 0
-    status_code = headers_result.get("status_code")
-    final_url = headers_result.get("final_url") or ""
-    if isinstance(status_code, int) and status_code < 400:
-        score += 5
-    if final_url.startswith("https://"):
-        score += 5
-    return min(score, MAX_POINTS["website_health"])
-
-
-def _score_email_security(dns_result: dict[str, Any]) -> int:
-    score = 0
-    if dns_result.get("spf"):
-        score += 5
-    if dns_result.get("dmarc"):
-        score += 6
-    if dns_result.get("dkim"):
-        score += 4
-    return min(score, MAX_POINTS["email_security"])
-
-
-def calculate_score(results: dict[str, Any]) -> dict[str, Any]:
-    """Calculate Saboss Security Score from scan results."""
-    categories = {
-        "ssl": _score_ssl(results.get("ssl", {})),
-        "headers": _score_headers(results.get("headers", {})),
-        "dns": _score_dns(results.get("dns", {})),
-        "website_health": _score_website_health(results.get("headers", {})),
-        "email_security": _score_email_security(results.get("dns", {})),
-    }
-    total = sum(categories.values())
-    max_total = sum(MAX_POINTS.values())
-    percentage = round((total / max_total) * 100)
-
-    if percentage >= 85:
-        grade = "A"
-    elif percentage >= 70:
-        grade = "B"
-    elif percentage >= 55:
-        grade = "C"
-    elif percentage >= 40:
-        grade = "D"
+    if possible == 0:
+        percentage = None
+        grade = "N/A"
     else:
-        grade = "E"
+        percentage = round(earned / possible * 100)
+        grade = _grade_for(percentage)
+        if high_risk_failed and grade in ("A", "B", "C"):
+            grade = HIGH_RISK_GRADE_CAP
 
     return {
-        "total": total,
-        "max_total": max_total,
+        "earned": round(earned, 1),
+        "possible": possible,
         "percentage": percentage,
         "grade": grade,
-        "categories": categories,
-        "max_points": MAX_POINTS,
+        "high_risk_failed": high_risk_failed,
+        "checks_completed": checks_completed,
+        "checks_total": len(findings),
+        "complete": checks_completed == len(findings),
+        "categories": {
+            name: {"earned": round(values["earned"], 1), "possible": values["possible"]}
+            for name, values in categories.items()
+        },
     }

@@ -16,38 +16,49 @@ def _import_dns():
 
 
 def _record_to_text(record: Any) -> str:
+    # TXT records can be split into several strings ("v=spf1 ..." "... -all").
+    # They must be joined back together, otherwise long SPF/DKIM records break.
+    if hasattr(record, "strings"):
+        return b"".join(record.strings).decode("utf-8", errors="replace").strip()
     text = record.to_text() if hasattr(record, "to_text") else str(record)
     return text.strip().strip('"')
 
 
-def _resolve(domain: str, record_type: str, limit: int = 20) -> list[str]:
-    dns_resolver = _import_dns()
-    if dns_resolver is None:
-        raise RuntimeError("Missing dependency: install dnspython with 'pip install -r requirements.txt'")
-
+def _resolve(dns_resolver: Any, name: str, record_type: str, limit: int = 20) -> list[str]:
     resolver = dns_resolver.Resolver(configure=False)
     resolver.nameservers = PUBLIC_DNS_SERVERS
     resolver.timeout = 3
     resolver.lifetime = 6
 
-    answers = resolver.resolve(domain, record_type, raise_on_no_answer=False)
+    answers = resolver.resolve(name, record_type, raise_on_no_answer=False)
     return [_record_to_text(record) for record in answers][:limit]
 
 
-def _safe_resolve(domain: str, record_type: str) -> tuple[list[str], str | None]:
+def _safe_resolve(name: str, record_type: str) -> tuple[list[str], str | None]:
+    """Return (records, error).
+
+    A name that does not exist (NXDOMAIN) is a normal answer, not an error:
+    for example most domains have no _dmarc record. Only real failures such
+    as timeouts are reported as errors.
+    """
+    dns_resolver = _import_dns()
+    if dns_resolver is None:
+        return [], "Missing dependency: install dnspython with 'pip install -r requirements.txt'"
+
     try:
-        return _resolve(domain, record_type), None
+        return _resolve(dns_resolver, name, record_type), None
+    except dns_resolver.NXDOMAIN:
+        return [], None
+    except dns_resolver.LifetimeTimeout:
+        return [], "DNS lookup timed out."
+    except dns_resolver.NoNameservers:
+        return [], "DNS servers could not answer."
     except Exception as exc:
-        return [], str(exc)
+        return [], f"DNS lookup failed ({type(exc).__name__})."
 
 
 def _find_spf(txt_records: list[str]) -> list[str]:
-    return [record for record in txt_records if "v=spf1" in record.lower()]
-
-
-def _find_dmarc(domain: str) -> list[str]:
-    records, _ = _safe_resolve(f"_dmarc.{domain}", "TXT")
-    return [record for record in records if "v=dmarc1" in record.lower()]
+    return [record for record in txt_records if record.lower().startswith("v=spf1")]
 
 
 def _find_dkim(domain: str) -> dict[str, list[str]]:
@@ -79,7 +90,12 @@ def check_dns(domain: str) -> dict[str, Any]:
             result["errors"][key] = error
 
     result["spf"] = _find_spf(result["txt"])
-    result["dmarc"] = _find_dmarc(domain)
+
+    dmarc_records, dmarc_error = _safe_resolve(f"_dmarc.{domain}", "TXT")
+    result["dmarc"] = [record for record in dmarc_records if record.lower().startswith("v=dmarc1")]
+    if dmarc_error:
+        result["errors"]["dmarc"] = dmarc_error
+
     result["dkim"] = _find_dkim(domain)
 
     return result
