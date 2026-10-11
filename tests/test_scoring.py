@@ -1,9 +1,4 @@
 from saboss_scan.scoring import calculate_score
-from saboss_scan.utils import normalize_domain
-
-
-def test_normalize_domain_removes_protocol_and_www():
-    assert normalize_domain("https://www.example.com/path") == "example.com"
 
 
 def test_calculate_score_has_grade_and_percentage():

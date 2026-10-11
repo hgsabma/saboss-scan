@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from saboss_scan.scanner import scan_domain
+from saboss_scan.utils import InvalidTargetError
 
 
 def print_summary(report: dict) -> None:
@@ -47,7 +49,11 @@ def main() -> None:
     parser.add_argument("--json", dest="json_path", help="Save full report as JSON file")
     args = parser.parse_args()
 
-    report = scan_domain(args.domain)
+    try:
+        report = scan_domain(args.domain)
+    except InvalidTargetError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(2)
     print_summary(report)
 
     if args.json_path:
