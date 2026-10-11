@@ -10,6 +10,7 @@ second lookup), connections use resolve_public_ip(): the name is resolved once,
 checked, and the connection goes to exactly that address (see http_client.py
 and ssl_checker.py).
 """
+
 from __future__ import annotations
 
 import ipaddress
@@ -47,8 +48,7 @@ def ensure_public_addresses(hostname: str, addresses: list[str]) -> None:
     blocked = [address for address in addresses if not is_public_ip(address)]
     if blocked:
         raise UnsafeTargetError(
-            f"'{hostname}' points to a private or reserved address ({', '.join(blocked)}) "
-            "and cannot be scanned."
+            f"'{hostname}' points to a private or reserved address ({', '.join(blocked)}) and cannot be scanned."
         )
 
 

@@ -1,0 +1,14 @@
+line-length = 120
+target-version = "py310"
+
+[lint]
+# E/F: errors, I: import order, B: likely bugs, S: security (bandit rules), UP: modern syntax
+select = ["E", "F", "I", "B", "S", "UP"]
+# Line length is handled by `ruff format`; long user-facing sentences stay readable on one line.
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# assert is how pytest works; test data contains fake secrets and addresses we must block.
+"tests/*" = ["S101", "S104", "S105", "S106", "E402"]
+# "PASS" is a finding status, not a password.
+"saboss_scan/findings.py" = ["S105"]

@@ -1,6 +1,7 @@
 from html.parser import HTMLParser
 
 from conftest import build_report
+
 from saboss_scan.html_report import render_html
 
 
@@ -8,9 +9,11 @@ class TagCollector(HTMLParser):
     def __init__(self):
         super().__init__()
         self.tags = []
+        self.attrs = []
 
     def handle_starttag(self, tag, attrs):
         self.tags.append(tag)
+        self.attrs.extend(attrs)
 
 
 def tags_in(html):
@@ -22,7 +25,7 @@ def tags_in(html):
 def test_report_contains_domain_grade_and_all_findings(sample_report):
     html = render_html(sample_report)
     assert "<title>Saboss Scan report: example.com</title>" in html
-    assert f'<b>{sample_report["score"]["grade"]}</b>' in html
+    assert f"<b>{sample_report['score']['grade']}</b>" in html
     for finding in sample_report["findings"]:
         assert finding["title"].replace("'", "&#x27;") in html
 
@@ -36,10 +39,12 @@ def test_report_includes_limitations(sample_report):
 def test_hostile_header_values_are_escaped():
     # A malicious website controls its own header values.
     attack = "<script>alert(1)</script><img src=x onerror=alert(2)>"
-    report = build_report(headers={
-        "strict-transport-security": f"max-age=0 {attack}",
-        "x-frame-options": attack,
-    })
+    report = build_report(
+        headers={
+            "strict-transport-security": f"max-age=0 {attack}",
+            "x-frame-options": attack,
+        }
+    )
     html = render_html(report)
     assert "<script" not in html
     assert "<img" not in html
@@ -53,10 +58,11 @@ def test_report_blocks_scripts_with_content_security_policy(sample_report):
     assert "default-src 'none'" in html
 
 
-def test_report_has_no_external_resources(sample_report):
-    html = render_html(sample_report)
-    assert "http://" not in html
-    assert "https://" not in html
+def test_report_loads_no_external_resources(sample_report):
+    collector = TagCollector()
+    collector.feed(render_html(sample_report))
+    assert not {"script", "link", "img", "iframe"} & set(collector.tags)
+    assert not [value for name, value in collector.attrs if name in ("src", "href") and value]
 
 
 def test_report_without_score():

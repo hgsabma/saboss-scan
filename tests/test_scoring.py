@@ -59,3 +59,28 @@ def test_whole_points_are_shown_without_decimals():
     assert score["earned"] == 11 and isinstance(score["earned"], int)
     score = calculate_score([make("warning", "medium")])
     assert score["earned"] == 2.5
+
+
+def test_failed_critical_check_caps_grade_at_e():
+    findings = [make("pass", "medium") for _ in range(20)] + [make("fail", "critical")]
+    score = calculate_score(findings)
+    assert score["percentage"] == 83
+    assert score["grade"] == "E"
+    assert score["critical_failed"] is True
+
+
+def test_not_applicable_is_excluded_from_score_and_coverage():
+    score = calculate_score([make("pass", "medium"), make("not_applicable", "medium")])
+    assert score["percentage"] == 100
+    assert score["checks_total"] == 1
+    assert score["coverage"] == 100
+
+
+def test_coverage_reflects_checks_that_could_not_run():
+    score = calculate_score([make("pass"), make("pass"), make("pass"), make("not_checked")])
+    assert score["coverage"] == 75
+
+
+def test_counts_by_status():
+    score = calculate_score([make("pass"), make("fail"), make("fail"), make("not_applicable")])
+    assert score["counts"] == {"fail": 2, "warning": 0, "pass": 1, "not_checked": 0, "not_applicable": 1}

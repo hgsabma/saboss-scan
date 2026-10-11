@@ -9,6 +9,7 @@ all scripts and external resources.
 The file has no external dependencies (no fonts, scripts or images), so it
 works offline and does not leak to third parties that someone opened it.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -21,9 +22,15 @@ CATEGORY_TITLES = {
     "dns": "DNS",
     "email": "E-mail security",
 }
-STATUS_LABELS = {"pass": "Pass", "warning": "Warning", "fail": "Fail", "not_checked": "Not checked"}
-STATUS_ORDER = {"fail": 0, "warning": 1, "not_checked": 2, "pass": 3}
-SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2, "info": 3}
+STATUS_LABELS = {
+    "pass": "Pass",
+    "warning": "Warning",
+    "fail": "Fail",
+    "not_checked": "Not checked",
+    "not_applicable": "Not applicable",
+}
+STATUS_ORDER = {"fail": 0, "warning": 1, "not_checked": 2, "pass": 3, "not_applicable": 4}
+SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 CSS = """
 :root {
@@ -69,7 +76,7 @@ h2 { font-size: 20px; margin: 0 0 12px; }
 .s-pass { color: var(--pass); background: var(--pass-bg); }
 .s-warning { color: var(--warn); background: var(--warn-bg); }
 .s-fail { color: var(--fail); background: var(--fail-bg); }
-.s-not_checked { color: var(--na); background: var(--na-bg); }
+.s-not_checked, .s-not_applicable { color: var(--na); background: var(--na-bg); }
 .category-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .points { color: var(--muted); font-size: 14px; }
 ul.findings { list-style: none; margin: 0; padding: 0; }
@@ -117,6 +124,14 @@ def _finding_item(finding: dict[str, Any]) -> str:
     ]
     if finding.get("detail"):
         parts.append(f'<p class="detail">{_e(finding["detail"])}</p>')
+    if finding.get("evidence"):
+        parts.append(f'<p class="detail"><strong>Observed:</strong> {_e(finding["evidence"])}</p>')
+    if finding.get("explanation") and finding["status"] in ("fail", "warning"):
+        parts.append(f'<p class="detail"><strong>Why it matters:</strong> {_e(finding["explanation"])}</p>')
+    if finding.get("confidence") == "heuristic":
+        parts.append(
+            '<p class="detail"><em>Heuristic check: the result is an educated guess, not a confirmed fact.</em></p>'
+        )
     if finding.get("recommendation") and finding["status"] in ("fail", "warning"):
         parts.append(f'<p class="fix"><strong>Fix:</strong> {_e(finding["recommendation"])}</p>')
     parts.append("</li>")
@@ -134,22 +149,25 @@ def render_html(report: dict[str, Any]) -> str:
     else:
         grade_html = (
             f'<div class="grade" role="img" aria-label="Grade {_e(score["grade"])}, {_e(score["percentage"])} percent">'
-            f'<b>{_e(score["grade"])}</b><span>{_e(score["percentage"])}%</span></div>'
+            f"<b>{_e(score['grade'])}</b><span>{_e(score['percentage'])}%</span></div>"
         )
 
     notices = []
     if not score["complete"]:
         notices.append(
-            f'{_e(score["checks_total"] - score["checks_completed"])} check(s) could not run and are '
+            f"{_e(score['checks_total'] - score['checks_completed'])} check(s) could not run and are "
             "not included in the score."
         )
-    if score["high_risk_failed"]:
+    if score.get("critical_failed"):
+        notices.append("A critical check failed, so the grade is capped at E.")
+    elif score["high_risk_failed"]:
         notices.append("A high-severity check failed, so the grade is capped at D.")
     notice_html = (
         '<section class="card notice" aria-label="Notes about this score"><ul>'
         + "".join(f"<li>{n}</li>" for n in notices)
         + "</ul></section>"
-        if notices else ""
+        if notices
+        else ""
     )
 
     counts = {status: 0 for status in STATUS_LABELS}
@@ -157,7 +175,12 @@ def render_html(report: dict[str, Any]) -> str:
         counts[finding["status"]] = counts.get(finding["status"], 0) + 1
     counts_html = "".join(
         f'<div class="count s-{_e(status)}"><b>{counts[status]}</b>{_e(label)}</div>'
-        for status, label in (("fail", "Failed"), ("warning", "Warnings"), ("pass", "Passed"), ("not_checked", "Not checked"))
+        for status, label in (
+            ("fail", "Failed"),
+            ("warning", "Warnings"),
+            ("pass", "Passed"),
+            ("not_checked", "Not checked"),
+        )
     )
 
     category_sections = []
@@ -176,9 +199,7 @@ def render_html(report: dict[str, Any]) -> str:
 
     if report["recommendations"]:
         recommendations_html = (
-            '<ol class="recommendations">'
-            + "".join(f"<li>{_e(r)}</li>" for r in report["recommendations"])
-            + "</ol>"
+            '<ol class="recommendations">' + "".join(f"<li>{_e(r)}</li>" for r in report["recommendations"]) + "</ol>"
         )
     else:
         recommendations_html = "<p>No issues were found in the checked settings.</p>"
@@ -228,7 +249,7 @@ def render_html(report: dict[str, Any]) -> str:
 </section>
 
 <footer>
-  <p>Generated by Saboss Scan, Saboss Technologies. Grades: A ≥ 85%, B ≥ 70%, C ≥ 55%, D ≥ 40%, otherwise E.
+  <p>Generated by Saboss Scan, Saboss Technologies. Grades: A ≥ 85%, B ≥ 70%, C ≥ 55%, D ≥ 40%, otherwise E. A failed critical check caps the grade at E, a failed high check at D.
   Only scan domains you own or are authorized to assess.</p>
 </footer>
 </main>

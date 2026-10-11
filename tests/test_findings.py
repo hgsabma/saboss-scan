@@ -16,19 +16,39 @@ GOOD_HEADERS = {
 def scan_results(ssl=None, redirect=None, headers=None, headers_error=None, dns=None):
     """Build fake checker output; anything not given is a healthy default."""
     return {
-        "ssl": ssl if ssl is not None else {
-            "https": True, "certificate_valid": True, "days_until_expiry": 90,
-            "error": None, "error_type": None,
+        "ssl": ssl
+        if ssl is not None
+        else {
+            "https": True,
+            "certificate_valid": True,
+            "days_until_expiry": 90,
+            "error": None,
+            "error_type": None,
         },
-        "http_redirect": redirect if redirect is not None else {
-            "redirects_to_https": True, "location": "https://example.com/", "error": None,
+        "http_redirect": redirect
+        if redirect is not None
+        else {
+            "redirects_to_https": True,
+            "location": "https://example.com/",
+            "error": None,
         },
-        "headers": {"headers": {**GOOD_HEADERS, **(headers or {})}, "error": headers_error},
+        "headers": {
+            "headers": {**GOOD_HEADERS, **(headers or {})},
+            "status_code": 200,
+            "final_url": "https://example.com/",
+            "cookies": [],
+            "error": headers_error,
+        },
         "dns": {
-            "a": ["192.0.2.1"], "aaaa": ["2001:db8::1"], "mx": ["10 mail.example.com."],
-            "txt": [], "spf": ["v=spf1 include:_spf.example.com -all"],
-            "dmarc": ["v=DMARC1; p=reject"], "dkim": {"selector1": ["v=DKIM1; k=rsa"]},
-            "errors": {}, **(dns or {}),
+            "a": ["192.0.2.1"],
+            "aaaa": ["2001:db8::1"],
+            "mx": ["10 mail.example.com."],
+            "txt": [],
+            "spf": ["v=spf1 include:_spf.example.com -all"],
+            "dmarc": ["v=DMARC1; p=reject"],
+            "dkim": {"selector1": ["v=DKIM1; k=rsa"]},
+            "errors": {},
+            **(dns or {}),
         },
     }
 
@@ -39,11 +59,13 @@ def status_of(results, finding_id):
 
 def test_healthy_site_passes_everything():
     findings = evaluate(scan_results())
-    assert {f.status for f in findings} == {"pass"}
+    # Cookies are "not applicable" because the fake homepage sets none.
+    assert {f.status for f in findings} == {"pass", "not_applicable"}
     assert build_recommendations(findings) == []
 
 
 # --- TLS ---------------------------------------------------------------
+
 
 def test_refused_port_443_means_no_https():
     results = scan_results(ssl={"error_type": "refused", "error": "refused"})
@@ -79,6 +101,7 @@ def test_http_redirect_to_other_http_url_is_a_warning():
 
 
 # --- Headers -----------------------------------------------------------
+
 
 def test_headers_not_checked_when_site_could_not_be_fetched():
     findings = evaluate(scan_results(headers_error="The request timed out."))
@@ -133,6 +156,7 @@ def test_weak_referrer_policy_is_a_warning():
 
 
 # --- E-mail and DNS --------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     ("spf", "expected"),
@@ -192,3 +216,65 @@ def test_recommendations_are_sorted_by_severity():
     recommendations = build_recommendations(evaluate(results))
     assert recommendations[0].startswith("[HIGH]")
     assert recommendations[-1].startswith("[LOW]")
+
+
+# --- Cookies, homepage status, evidence -------------------------------------
+
+
+def cookie(name, secure=True, httponly=True, samesite="lax"):
+    return {"name": name, "secure": secure, "httponly": httponly, "samesite": samesite}
+
+
+def with_cookies(cookies):
+    results = scan_results()
+    results["headers"]["cookies"] = cookies
+    return results
+
+
+@pytest.mark.parametrize(
+    ("cookies", "expected"),
+    [
+        ([], "not_applicable"),
+        ([cookie("session")], "pass"),
+        ([cookie("session", secure=False)], "fail"),
+        ([cookie("tracking", samesite="none", secure=False)], "fail"),
+        ([cookie("prefs", httponly=False)], "warning"),
+        ([cookie("prefs", samesite=None)], "warning"),
+    ],
+)
+def test_cookie_security(cookies, expected):
+    assert status_of(with_cookies(cookies), "headers.cookies") == expected
+
+
+def test_cookie_evidence_never_contains_values():
+    finding = next(f for f in evaluate(with_cookies([cookie("session")])) if f.id == "headers.cookies")
+    assert finding.evidence == "session (Secure, HttpOnly, SameSite=lax)"
+
+
+def test_homepage_error_status_is_a_warning():
+    results = scan_results()
+    results["headers"]["status_code"] = 503
+    assert status_of(results, "web.https_status") == "warning"
+
+
+def test_every_completed_finding_has_evidence_and_explanation():
+    for finding in evaluate(scan_results()):
+        assert finding.explanation, finding.id
+        if finding.status not in ("not_checked",):
+            assert finding.evidence, finding.id
+
+
+def test_dkim_is_marked_heuristic():
+    findings = {f.id: f for f in evaluate(scan_results())}
+    assert findings["email.dkim"].confidence == "heuristic"
+    assert findings["email.spf"].confidence == "confirmed"
+
+
+def test_invalid_certificate_is_critical():
+    results = scan_results(ssl={"https": True, "error_type": "certificate", "error": "self-signed"})
+    cert = next(f for f in evaluate(results) if f.id == "tls.certificate")
+    assert (cert.severity, cert.status) == ("critical", "fail")
+
+
+def test_same_input_gives_same_findings():
+    assert [f.to_dict() for f in evaluate(scan_results())] == [f.to_dict() for f in evaluate(scan_results())]

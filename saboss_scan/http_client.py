@@ -10,6 +10,7 @@ This client looks the name up ONCE, checks the address, and then connects to
 exactly that address. It still sends the right Host header and verifies the
 TLS certificate for the hostname, so the website cannot tell the difference.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -28,12 +29,19 @@ REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 class FetchError(Exception):
     """A request failed. The message is safe to show to users."""
 
+    def __init__(self, message: str, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
+
 
 @dataclass
 class HttpResponse:
     url: str
     status_code: int
     headers: dict[str, str] = field(default_factory=dict)  # lower-case names
+    # Set-Cookie headers kept separately: joining them with ", " would break
+    # parsing because cookie dates contain commas.
+    set_cookies: list[str] = field(default_factory=list)
 
     @property
     def location(self) -> str | None:
@@ -61,12 +69,23 @@ def _make_pool(scheme: str, ip: str, hostname: str, timeout: float) -> urllib3.H
     return urllib3.HTTPConnectionPool(ip, 80, timeout=pool_timeout, retries=False, maxsize=1)
 
 
-def fetch(url: str, timeout: float = 5) -> HttpResponse:
+def fetch(url: str, timeout: float = 5, attempts: int = 2) -> HttpResponse:
     """GET one URL without following redirects and without reading the body.
 
+    A timeout is retried once (attempts=2); other errors are not retried.
     Raises UnsafeTargetError if the host resolves to a non-public address,
     and FetchError for network problems.
     """
+    for attempt in range(1, attempts + 1):
+        try:
+            return _fetch_once(url, timeout)
+        except FetchError as exc:
+            if not exc.retryable or attempt == attempts:
+                raise
+    raise AssertionError("unreachable")
+
+
+def _fetch_once(url: str, timeout: float) -> HttpResponse:
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
     if parsed.scheme not in ("http", "https") or not hostname:
@@ -94,7 +113,12 @@ def fetch(url: str, timeout: float = 5) -> HttpResponse:
         try:
             # .get() joins repeated headers with ", " like browsers do.
             headers = {name.lower(): response.headers.get(name) for name in response.headers}
-            return HttpResponse(url=url, status_code=response.status, headers=headers)
+            return HttpResponse(
+                url=url,
+                status_code=response.status,
+                headers=headers,
+                set_cookies=list(response.headers.getlist("set-cookie")),
+            )
         finally:
             response.release_conn()
     except urllib3.exceptions.SSLError:
@@ -104,7 +128,7 @@ def fetch(url: str, timeout: float = 5) -> HttpResponse:
     except urllib3.exceptions.NewConnectionError:
         raise FetchError("Could not connect.") from None
     except (urllib3.exceptions.ConnectTimeoutError, urllib3.exceptions.ReadTimeoutError):
-        raise FetchError("The request timed out.") from None
+        raise FetchError("The request timed out.", retryable=True) from None
     except urllib3.exceptions.HTTPError as exc:
         raise FetchError(f"Request failed ({type(exc).__name__}).") from None
     finally:

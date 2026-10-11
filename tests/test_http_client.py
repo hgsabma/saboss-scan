@@ -1,4 +1,5 @@
 """Tests for the pinned HTTP client. No real connections are made."""
+
 import pytest
 import urllib3
 
@@ -18,6 +19,7 @@ class FakeUrllib3Response:
 
 class FakePool:
     """Records how fetch() set up the connection instead of connecting."""
+
     created = []
 
     def __init__(self, host, port, **kwargs):
@@ -65,7 +67,9 @@ def test_http_uses_port_80(fake_network):
 
 
 def test_response_headers_are_lowercased_and_repeated_headers_joined(fake_network):
-    fake_network.response = FakeUrllib3Response(301, [("Location", "https://example.com/"), ("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")])
+    fake_network.response = FakeUrllib3Response(
+        301, [("Location", "https://example.com/"), ("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")]
+    )
     response = fetch("http://example.com/")
     assert response.is_redirect
     assert response.location == "https://example.com/"
@@ -108,3 +112,32 @@ def test_network_errors_become_friendly_messages(fake_network, error, message):
 def test_unsupported_scheme_is_rejected(fake_network):
     with pytest.raises(FetchError):
         fetch("ftp://example.com/")
+
+
+def test_timeout_is_retried_once(monkeypatch, fake_network):
+    calls = []
+
+    class Flaky(FakePool):
+        def urlopen(self, method, path, **kwargs):
+            calls.append(path)
+            if len(calls) == 1:
+                raise urllib3.exceptions.ConnectTimeoutError(None, "slow")
+            return FakeUrllib3Response(200, {})
+
+    monkeypatch.setattr(http_client.urllib3, "HTTPSConnectionPool", Flaky)
+    assert fetch("https://example.com/").status_code == 200
+    assert len(calls) == 2
+
+
+def test_connection_refused_is_not_retried(fake_network):
+    fake_network.response = urllib3.exceptions.NewConnectionError(None, "refused")
+    with pytest.raises(FetchError):
+        fetch("https://example.com/")
+    assert len(fake_network.created) == 1
+
+
+def test_set_cookie_headers_are_kept_separately(fake_network):
+    fake_network.response = FakeUrllib3Response(
+        200, [("Set-Cookie", "a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT"), ("Set-Cookie", "b=2")]
+    )
+    assert fetch("https://example.com/").set_cookies == ["a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT", "b=2"]

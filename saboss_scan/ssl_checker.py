@@ -7,7 +7,6 @@ from typing import Any
 
 from .network_safety import UnsafeTargetError, resolve_public_ip
 
-
 CERT_DATE_FORMAT = "%b %d %H:%M:%S %Y %Z"
 
 

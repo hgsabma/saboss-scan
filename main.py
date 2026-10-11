@@ -9,7 +9,6 @@ from saboss_scan.html_report import render_html
 from saboss_scan.scanner import scan_domain
 from saboss_scan.utils import InvalidTargetError
 
-
 CATEGORY_TITLES = {
     "tls": "HTTPS / TLS",
     "http_headers": "HTTP security headers",
@@ -21,6 +20,7 @@ STATUS_LABELS = {
     "warning": "WARN",
     "fail": "FAIL",
     "not_checked": "N/A ",
+    "not_applicable": "--  ",
 }
 
 
@@ -33,10 +33,12 @@ def print_summary(report: dict) -> None:
         print("Score:  not available (no checks could be completed)")
     else:
         print(f"Score:  {score['percentage']}% (grade {score['grade']})")
-    print(f"Checks: {score['checks_completed']} of {score['checks_total']} completed")
+    print(f"Checks: {score['checks_completed']} of {score['checks_total']} completed ({score['coverage']}% coverage)")
     if not score["complete"]:
         print("        Some checks could not run (N/A) and are not included in the score.")
-    if score["high_risk_failed"]:
+    if score["critical_failed"]:
+        print("        A critical check failed, so the grade is capped at E.")
+    elif score["high_risk_failed"]:
         print("        A high-severity check failed, so the grade is capped at D.")
 
     for category, title in CATEGORY_TITLES.items():

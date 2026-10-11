@@ -1,4 +1,5 @@
 """Shared test helpers. pytest loads this file automatically."""
+
 import pytest
 
 from saboss_scan.findings import evaluate
@@ -14,12 +15,20 @@ def build_report(domain="example.com", headers=None, ssl=None):
         "version": "test",
         "domain": domain,
         "scanned_at": "2026-10-11T12:00:00+00:00",
-        "ssl": ssl or {"https": True, "certificate_valid": True, "days_until_expiry": 90,
-                       "error": None, "error_type": None},
+        "ssl": ssl
+        or {"https": True, "certificate_valid": True, "days_until_expiry": 90, "error": None, "error_type": None},
         "http_redirect": {"redirects_to_https": True, "location": "https://example.com/", "error": None},
         "headers": {"headers": headers or {}, "error": None},
-        "dns": {"a": ["192.0.2.1"], "aaaa": [], "mx": [], "txt": [], "spf": ["v=spf1 -all"],
-                "dmarc": ["v=DMARC1; p=none"], "dkim": {}, "errors": {}},
+        "dns": {
+            "a": ["192.0.2.1"],
+            "aaaa": [],
+            "mx": [],
+            "txt": [],
+            "spf": ["v=spf1 -all"],
+            "dmarc": ["v=DMARC1; p=none"],
+            "dkim": {},
+            "errors": {},
+        },
     }
     findings = evaluate(results)
     results["findings"] = [f.to_dict() for f in findings]

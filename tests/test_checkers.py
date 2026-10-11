@@ -1,5 +1,6 @@
 """Tests for the network checkers. No real network traffic is made:
 the functions that would talk to the internet are replaced with fakes."""
+
 import socket
 import ssl
 
@@ -12,8 +13,8 @@ import pytest
 from saboss_scan import dns_checker, ssl_checker
 from saboss_scan.network_safety import UnsafeTargetError
 
-
 # --- DNS -----------------------------------------------------------------
+
 
 def test_long_txt_records_are_joined():
     record = dns.rdata.from_text(
@@ -68,6 +69,7 @@ def test_spf_is_only_matched_at_the_start_of_a_record():
 
 # --- TLS -----------------------------------------------------------------
 
+
 @pytest.fixture
 def fake_public_ip(monkeypatch):
     monkeypatch.setattr(ssl_checker, "resolve_public_ip", lambda domain: "192.0.2.10")
@@ -120,3 +122,20 @@ def test_ssl_check_is_blocked_for_private_address(monkeypatch):
 def test_unresolvable_domain_is_a_dns_error(monkeypatch):
     monkeypatch.setattr(ssl_checker, "resolve_public_ip", lambda domain: None)
     assert ssl_checker.check_ssl("example.com")["error_type"] == "dns"
+
+
+# --- Cookies ----------------------------------------------------------------
+
+from saboss_scan.headers_checker import parse_set_cookie  # noqa: E402
+
+
+def test_parse_set_cookie_reads_attributes_and_drops_value():
+    parsed = parse_set_cookie(
+        "sid=SECRET-TOKEN; Path=/; Secure; HttpOnly; SameSite=Strict; Expires=Wed, 21 Oct 2026 07:28:00 GMT"
+    )
+    assert parsed == {"name": "sid", "secure": True, "httponly": True, "samesite": "strict"}
+    assert "SECRET" not in str(parsed)
+
+
+def test_parse_set_cookie_without_attributes():
+    assert parse_set_cookie("a=1") == {"name": "a", "secure": False, "httponly": False, "samesite": None}

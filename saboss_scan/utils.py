@@ -90,9 +90,7 @@ def normalize_domain(value: str) -> str:
 
     for suffix in BLOCKED_SUFFIXES:
         if hostname == suffix or hostname.endswith("." + suffix):
-            raise InvalidTargetError(
-                f"'{hostname}' is a local or reserved name and cannot be scanned."
-            )
+            raise InvalidTargetError(f"'{hostname}' is a local or reserved name and cannot be scanned.")
 
     labels = hostname.split(".")
     if len(labels) < 2:

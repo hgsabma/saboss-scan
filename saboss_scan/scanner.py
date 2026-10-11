@@ -16,8 +16,7 @@ from .utils import normalize_domain
 LIMITATIONS = [
     "This is a passive, external check of public configuration. It does not test "
     "application code, login pages, servers, or internal networks.",
-    "A high score does not mean the website is secure; it means the checked "
-    "settings follow common best practices.",
+    "A high score does not mean the website is secure; it means the checked settings follow common best practices.",
     "Only the homepage over HTTPS is checked; other pages may send different headers.",
     "DKIM is only searched for with common selector names.",
 ]

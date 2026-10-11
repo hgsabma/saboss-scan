@@ -10,9 +10,21 @@ from saboss_scan.utils import InvalidTargetError
 
 @pytest.mark.parametrize(
     "address",
-    ["127.0.0.1", "10.0.0.1", "172.16.5.4", "192.168.1.1", "169.254.169.254",
-     "100.64.0.1", "0.0.0.0", "224.0.0.1", "::1", "fe80::1%eth0", "fd00::1",
-     "::ffff:127.0.0.1", "::ffff:169.254.169.254"],
+    [
+        "127.0.0.1",
+        "10.0.0.1",
+        "172.16.5.4",
+        "192.168.1.1",
+        "169.254.169.254",
+        "100.64.0.1",
+        "0.0.0.0",
+        "224.0.0.1",
+        "::1",
+        "fe80::1%eth0",
+        "fd00::1",
+        "::ffff:127.0.0.1",
+        "::ffff:169.254.169.254",
+    ],
 )
 def test_internal_addresses_are_not_public(address):
     assert is_public_ip(address) is False
@@ -26,6 +38,7 @@ def test_internet_addresses_are_public(address):
 def fake_getaddrinfo(addresses):
     def _fake(host, port, *args, **kwargs):
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (address, port)) for address in addresses]
+
     return _fake
 
 
@@ -74,6 +87,7 @@ def test_scan_stops_before_connecting_when_public_dns_returns_private_ip(monkeyp
 
 # --- resolve_public_ip ------------------------------------------------------
 
+
 def test_resolve_public_ip_prefers_ipv4(monkeypatch):
     monkeypatch.setattr(network_safety, "resolve_addresses", lambda host: ["2606:4700::1", "1.1.1.1"])
     assert network_safety.resolve_public_ip("example.com") == "1.1.1.1"
@@ -91,6 +105,7 @@ def test_resolve_public_ip_returns_none_when_unresolvable(monkeypatch):
 
 
 # --- Redirect following ---------------------------------------------------
+
 
 def page(url, status_code=200, location=None, headers=None):
     headers = {k.lower(): v for k, v in (headers or {}).items()}
@@ -116,12 +131,15 @@ def install_fake_web(monkeypatch, pages, private_hosts=()):
 
 
 def test_safe_redirects_are_followed(monkeypatch):
-    connected = install_fake_web(monkeypatch, {
-        "https://example.com/": page("https://example.com/", 301, "https://www.example.com/"),
-        "https://www.example.com/": page(
-            "https://www.example.com/", 200, headers={"X-Content-Type-Options": "nosniff"}
-        ),
-    })
+    connected = install_fake_web(
+        monkeypatch,
+        {
+            "https://example.com/": page("https://example.com/", 301, "https://www.example.com/"),
+            "https://www.example.com/": page(
+                "https://www.example.com/", 200, headers={"X-Content-Type-Options": "nosniff"}
+            ),
+        },
+    )
     result = headers_checker.check_headers("example.com")
     assert result["error"] is None
     assert result["final_url"] == "https://www.example.com/"
@@ -130,10 +148,13 @@ def test_safe_redirects_are_followed(monkeypatch):
 
 
 def test_relative_redirect_is_resolved(monkeypatch):
-    install_fake_web(monkeypatch, {
-        "https://example.com/": page("https://example.com/", 302, "/en/"),
-        "https://example.com/en/": page("https://example.com/en/", 200),
-    })
+    install_fake_web(
+        monkeypatch,
+        {
+            "https://example.com/": page("https://example.com/", 302, "/en/"),
+            "https://example.com/en/": page("https://example.com/en/", 200),
+        },
+    )
     assert headers_checker.check_headers("example.com")["final_url"] == "https://example.com/en/"
 
 
@@ -153,17 +174,18 @@ def test_redirect_to_internal_host_is_not_followed(monkeypatch):
     ["http://169.254.169.254/latest/meta-data/", "https://localhost/", "https://example.com:8443/"],
 )
 def test_redirect_to_ip_localhost_or_custom_port_is_not_followed(monkeypatch, location):
-    connected = install_fake_web(
-        monkeypatch, {"https://example.com/": page("https://example.com/", 302, location)}
-    )
+    connected = install_fake_web(monkeypatch, {"https://example.com/": page("https://example.com/", 302, location)})
     result = headers_checker.check_headers("example.com")
     assert result["error"] is not None
     assert connected == ["https://example.com/"]
 
 
 def test_redirect_loop_stops(monkeypatch):
-    install_fake_web(monkeypatch, {
-        "https://example.com/": page("https://example.com/", 302, "https://example.com/"),
-    })
+    install_fake_web(
+        monkeypatch,
+        {
+            "https://example.com/": page("https://example.com/", 302, "https://example.com/"),
+        },
+    )
     result = headers_checker.check_headers("example.com")
     assert "Too many redirects" in result["error"]
