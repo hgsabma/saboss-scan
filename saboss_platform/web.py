@@ -37,7 +37,14 @@ def _query(request: Request, **changes: Any) -> str:
     return "?" + urlencode(params) if params else "?"
 
 
+def _asset_version() -> str:
+    """Changes whenever a static file changes, so browsers fetch the new version."""
+    static = Path(__file__).parent / "static"
+    return str(max(int(f.stat().st_mtime) for f in static.iterdir() if f.is_file()))
+
+
 templates.env.filters["dt"] = _datetime
+templates.env.globals["asset_version"] = _asset_version()
 templates.env.globals["query"] = _query
 templates.env.globals["version"] = __version__
 templates.env.globals["CSRF_FIELD"] = CSRF_FIELD

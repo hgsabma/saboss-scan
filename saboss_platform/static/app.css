@@ -209,8 +209,8 @@ input:focus, select:focus { border-color: var(--brand); outline: 2px solid var(-
 .meter.good > span { background: var(--pass); }
 .meter.mid > span { background: #d29a00; }
 .meter.bad > span { background: var(--fail); }
-.category-row { display: grid; grid-template-columns: 150px 1fr 70px; gap: 12px; align-items: center; margin: 10px 0; }
-@media (max-width: 520px) { .category-row { grid-template-columns: 1fr 60px; } .category-row .meter { grid-column: 1 / -1; grid-row: 2; } }
+.category-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; margin: 12px 0; }
+.category-row progress { grid-column: 1 / -1; grid-row: 2; }
 
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -287,3 +287,7 @@ progress.bar.mid::-webkit-progress-value { background: #d29a00; }
 progress.bar.mid::-moz-progress-bar { background: #d29a00; }
 progress.bar.bad::-webkit-progress-value { background: var(--fail); }
 progress.bar.bad::-moz-progress-bar { background: var(--fail); }
+
+/* Grid gaps already space cards; avoid doubling it. */
+.grid > .card + .card { margin-top: 0; }
+@media (max-width: 600px) { .topbar .user .muted { display: none; } }
