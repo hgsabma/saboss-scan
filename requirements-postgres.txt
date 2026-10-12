@@ -1,0 +1,3 @@
+-r requirements.txt
+# PostgreSQL driver (used by the Docker image / production)
+psycopg[binary]==3.3.5

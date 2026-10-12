@@ -2,23 +2,53 @@
 
 [![Tests](https://github.com/hgsabma/saboss-scan/actions/workflows/tests.yml/badge.svg)](https://github.com/hgsabma/saboss-scan/actions/workflows/tests.yml)
 
-Saboss Scan is a passive security check for websites and domains, built by Saboss Technologies.
-It looks at publicly visible configuration and explains, in plain language, what to improve.
+**Saboss Scan** is a passive security assessment platform for websites and domains, built by
+Saboss Technologies. It checks publicly visible configuration (HTTPS, certificates, security
+headers, cookies, DNS and e-mail protection), explains every finding with evidence, and tells you
+exactly what to fix.
 
-> Only scan domains you own or have explicit permission to assess.
+> Only assess domains you own or have explicit permission to assess. Saboss Scan makes only
+> ordinary requests (the same ones a browser or mail server makes) and never attempts exploitation.
+
+It comes in two forms that share one scanning engine:
+
+| | Command line (`main.py`) | Web platform (`saboss_platform`) |
+|---|---|---|
+| For | Quick checks, scripts | Teams, history, monitoring |
+| Accounts & organizations | – | ✓ roles: owner, admin, member, viewer |
+| Reports | Terminal, JSON, HTML | Web, JSON, HTML, PDF |
+| History, comparison, alerts | – | ✓ |
+| API | – | ✓ REST API with API keys |
 
 ## What it checks
 
 | Category | Checks |
 |---|---|
-| HTTPS / TLS | HTTPS available, trusted certificate, certificate expiry, http:// → https:// redirect |
-| HTTP security headers | HSTS (incl. max-age), Content-Security-Policy (incl. unsafe scripts), clickjacking protection, `nosniff`, Referrer-Policy, Permissions-Policy |
+| HTTPS / TLS | HTTPS available, certificate trusted and matching (critical), expiry, http:// → https:// redirect |
+| HTTP security | Homepage status, HSTS (incl. max-age), Content-Security-Policy (incl. unsafe scripts), clickjacking protection, `nosniff`, Referrer-Policy, Permissions-Policy, cookie `Secure` / `HttpOnly` / `SameSite` |
 | DNS | Domain resolves, IPv6 available |
-| E-mail security | SPF (incl. `+all`, multiple records), DMARC policy (`none`/`quarantine`/`reject`), DKIM (common selectors only) |
+| E-mail | SPF (incl. `+all`, multiple records), DMARC policy, DKIM (common selectors, marked as heuristic) |
 
-All checks are ordinary requests that any browser or mail server would make. Nothing is attacked or brute-forced.
+Every finding includes **evidence** (what was observed), an **explanation** (why it matters),
+a **confidence** (confirmed or heuristic) and a **recommendation**. Checks that could not run are
+reported as *not checked* and never counted as failures.
 
-## Installation
+### How the score works
+
+| Severity | Points | | Outcome | Credit |
+|---|---|---|---|---|
+| critical | 20 | | pass | 100% |
+| high | 10 | | warning | 50% |
+| medium | 5 | | fail | 0% |
+| low | 2 | | not checked / not applicable | excluded |
+| info | 0 (shown, not scored) | | | |
+
+Score = earned ÷ possible points. Grades: **A** ≥ 85%, **B** ≥ 70%, **C** ≥ 55%, **D** ≥ 40%, else **E**.
+A failed critical check caps the grade at E, a failed high check at D. The report shows the
+*coverage* (share of applicable checks that completed) as the score's confidence.
+**A high score does not mean a website is secure**: it means the checked settings follow common best practices.
+
+## Quick start
 
 Requires Python 3.10 or newer.
 
@@ -26,124 +56,91 @@ Requires Python 3.10 or newer.
 python -m venv .venv
 ```
 
-Activate the virtual environment:
-
-- Windows PowerShell: `.venv\Scripts\Activate.ps1`
-- macOS/Linux: `source .venv/bin/activate`
-
-Install the dependencies:
+Activate it (Windows PowerShell: `.venv\Scripts\Activate.ps1`, macOS/Linux: `source .venv/bin/activate`), then:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Usage
+### Command line
 
 ```bash
 python main.py example.com
+python main.py example.com --html reports/example.html --json reports/example.json
 ```
-
-Save a readable HTML report (open it in any browser, or share it with the site owner):
-
-```bash
-python main.py example.com --html reports/example.html
-```
-
-Save the full report as JSON (for other tools):
-
-```bash
-python main.py example.com --json reports/example.json
-```
-
-The `reports/` folder is ignored by Git, so reports about real domains are never committed by accident.
-The HTML report is a single file with no scripts or external resources; every value from the scanned
-site is escaped, so a hostile website cannot inject code into the report.
 
 Exit codes: `0` scan completed, `1` report could not be saved, `2` invalid or unsafe target.
 
-Invalid or unsafe targets are rejected:
+### Web platform
 
-- IP addresses, `localhost` and internal names such as `.local`/`.internal`
-- URLs with passwords or custom ports
-- Domains that resolve to private, loopback or cloud-metadata addresses (for example `localtest.me` → `127.0.0.1`)
+```bash
+python -m saboss_platform serve
+```
 
-Redirects are followed one hop at a time (at most 5), and every hop is checked the same way.
-Each connection goes to the exact IP address that was checked (the name is never looked up twice),
-which prevents DNS-rebinding tricks.
+Open http://127.0.0.1:8000, create an account, add a domain and run a scan. Data is stored in
+`data/saboss.db` (SQLite) by default; the schema is created and migrated automatically.
 
-## How the score works
+For a production-like setup with PostgreSQL and Docker see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Every check produces a **finding** with a fixed severity and an outcome.
+## Security model (summary)
 
-| Severity | Points |   | Outcome | Credit |
-|---|---|---|---|---|
-| high | 10 |   | pass | 100% |
-| medium | 5 |   | warning | 50% |
-| low | 2 |   | fail | 0% |
-| info | 0 (shown, not scored) |   | not checked | left out of the score |
+- **SSRF protection:** targets must be public domain names; every resolved address (including each
+  redirect hop and webhook target) is checked, and connections are pinned to the checked IP to
+  prevent DNS rebinding. Private, loopback, link-local, CGNAT and cloud-metadata addresses are refused.
+- **Authorization:** adding a domain requires confirming authorization (recorded in the audit log);
+  scheduled monitoring additionally requires DNS TXT ownership verification.
+- **Accounts:** Argon2id password hashing, server-side sessions with hashed tokens, CSRF protection,
+  rate limits, role-based access, organization isolation, audit log.
+- **Web hardening:** strict Content-Security-Policy (no inline scripts or styles), HSTS in
+  production, `X-Frame-Options: DENY`, escaped output everywhere, no stack traces shown to users.
 
-- **Score** = earned points ÷ possible points.
-- **Grades:** A ≥ 85%, B ≥ 70%, C ≥ 55%, D ≥ 40%, otherwise E.
-- A failed **high**-severity check (for example no HTTPS or an untrusted certificate) caps the grade at **D**.
-- If a check could not run (for example a timeout), it is shown as `N/A` and not counted against the site.
-  The report always shows how many checks were completed.
+Details and remaining risks: [docs/SECURITY.md](docs/SECURITY.md).
 
-## Scope and limitations
+## Documentation
 
-- This is an external check of public configuration. It does not test application code,
-  login pages, servers or internal networks.
-- **A high score does not mean a website is secure.** It means the checked settings follow common best practices.
-- Only the homepage over HTTPS is checked; other pages may send different headers.
-- DKIM can only be found when a common selector name is used.
+| Document | Contents |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Modules, data model, request flow, how future Saboss products plug in |
+| [docs/SECURITY.md](docs/SECURITY.md) | Threat model, controls, known limitations, reporting vulnerabilities |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Configuration, Docker, PostgreSQL, backups, hardening checklist |
+| [docs/API.md](docs/API.md) | REST API with examples |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Prioritized remaining work |
 
 ## Development
 
-Install the development tools and run the tests (they make no network requests):
-
 ```bash
 pip install -r requirements-dev.txt
+python -m pytest              # 217 offline tests (no real network traffic)
+ruff check . && ruff format --check .
+bandit -q -r saboss_scan saboss_platform main.py -s B105
+pip-audit -r requirements.txt
 ```
 
-```bash
-python -m pytest
-```
-
-GitHub Actions runs the same tests on Python 3.10–3.13 for every push to `main` and every pull request.
-
-Project layout:
+GitHub Actions runs all of these, a migration consistency check and a Docker build on every pull request.
 
 ```text
-main.py                     command-line interface
-saboss_scan/
-  scanner.py                runs all checks and builds the report
-  utils.py                  input validation (which targets are allowed)
-  network_safety.py         blocks private/internal IP addresses
-  http_client.py            HTTP requests pinned to a checked IP address
-  ssl_checker.py            TLS handshake and certificate details
-  headers_checker.py        HTTP security headers and http→https redirect
-  dns_checker.py            DNS, SPF, DMARC and DKIM lookups
-  findings.py               turns raw results into findings (the rules)
-  scoring.py                Saboss Security Score
-  recommendations.py        prioritized advice
-  html_report.py            self-contained HTML report
-tests/                      automated tests
+main.py                    command-line interface
+saboss_scan/               scanning engine (no web dependencies)
+  scanner.py               runs all checks and builds the report
+  utils.py                 target validation
+  network_safety.py        private-address blocking
+  http_client.py           HTTP client pinned to verified IPs
+  ssl_checker.py, headers_checker.py, dns_checker.py
+  findings.py              rules: raw results → findings
+  scoring.py, recommendations.py, html_report.py
+saboss_platform/           web platform shared by Saboss products
+  app.py                   application factory, security middleware
+  auth.py, security.py     sessions, CSRF, API keys, password hashing
+  models.py                users, organizations, memberships, audit log
+  routes_account.py        register, login, password reset
+  routes_settings.py       account, organization, API keys, notifications, audit
+  scan/                    the Saboss Scan product module
+migrations/                Alembic database migrations
+tests/                     automated tests
 ```
 
-## Project status
+## Status
 
-Version 0.3.0. Early MVP, command-line only, not production-ready.
-
-**Done**
-- Input validation that rejects IPs, local/reserved names, credentials and custom ports.
-- Findings with severity and pass/warning/fail/not-checked outcomes.
-- Transparent, documented scoring; failed checks no longer confused with checks that could not run.
-- Fixed: missing DMARC records were treated as DNS errors; long TXT records were split; `www.` was stripped.
-- Domains resolving to private addresses are blocked; redirects are validated hop by hop.
-- Continuous integration with GitHub Actions; dependencies upgraded.
-- HTML reports (`--html`), responsive, light/dark mode, printable.
-- Fixed: SPF was missed on domains with more than 20 TXT records (for example github.com).
-- Connections pinned to the verified IP address (DNS-rebinding protection); `requests` replaced by `urllib3`.
-
-**Known issues / next steps**
-- A public web version will additionally need rate limiting, proof of domain ownership and authentication.
-- Translations and a web interface are planned later.
+Version 0.4.0. The scanner, web platform, API, reports and monitoring work end to end and are
+covered by automated tests. It has **not** yet been deployed publicly or load-tested, and it has not
+had an external security review: see [docs/ROADMAP.md](docs/ROADMAP.md) before going live.

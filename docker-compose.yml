@@ -1,0 +1,34 @@
+# Local production-like stack: Saboss Scan + PostgreSQL.
+#   cp .env.example .env   (then edit it)
+#   docker compose up --build
+# The app listens on http://127.0.0.1:8000 (only on this machine).
+services:
+  app:
+    build: .
+    env_file: .env
+    environment:
+      SABOSS_DATABASE_URL: postgresql+psycopg://saboss:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/saboss
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: saboss
+      POSTGRES_DB: saboss
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saboss -d saboss"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata:

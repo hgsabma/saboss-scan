@@ -9,3 +9,6 @@ reports/
 
 # Local database
 data/
+
+# Secrets
+.env
