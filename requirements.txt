@@ -1,5 +1,5 @@
 # Scanner engine
-urllib3==2.7.0
+urllib3==2.8.0
 certifi==2026.6.17
 dnspython==2.8.0
 

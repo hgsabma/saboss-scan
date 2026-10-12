@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "_macros.html" import grade, status_badge, csrf with context %}
+{% block title %}{{ domain.hostname }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="small muted mb-0"><a href="/domains">Domains</a> /</p>
+    <h1>{{ domain.hostname }}</h1>
+    <p class="muted">Added {{ domain.created_at|dt("%Y-%m-%d") }} · authorization confirmed by {{ domain.authorization_confirmed_by }}</p>
+  </div>
+  <div class="actions">
+    {% if ctx.can("member") %}
+    <form method="post" action="/domains/{{ domain.id }}/scan" class="inline">{{ csrf() }}
+      <button class="btn btn-primary" type="submit" {% if active %}disabled aria-disabled="true"{% endif %}>{% if active %}Scan in progress…{% else %}Run scan{% endif %}</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid grid-3">
+  <section class="card" aria-labelledby="latest-heading">
+    <h2 id="latest-heading">Latest result</h2>
+    {% if latest %}
+      <div class="flex-between">
+        {{ grade(latest.grade, "grade-lg") }}
+        <div class="text-right">
+          <div class="stat"><div class="value">{{ latest.score_percentage if latest.score_percentage is not none else "–" }}{% if latest.score_percentage is not none %}%{% endif %}</div></div>
+          <div class="small muted">{{ latest.finished_at|dt }}</div>
+        </div>
+      </div>
+      <p class="mt mb-0"><a href="/scans/{{ latest.id }}">View full report →</a></p>
+    {% else %}
+      <p class="muted mb-0">No completed scan yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="history-heading">
+    <h2 id="history-heading">Score history</h2>
+    {% if sparkline %}
+      <svg class="sparkline" viewBox="0 0 240 48" preserveAspectRatio="none" role="img" aria-label="Score trend over the last completed scans">
+        <polyline points="{{ sparkline }}"/>
+      </svg>
+      <p class="small muted mb-0">Last {{ scans|selectattr("status", "equalto", "completed")|list|length }} completed scans (0–100%).</p>
+    {% else %}
+      <p class="muted mb-0">The trend appears after two completed scans.</p>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="owner-heading">
+    <h2 id="owner-heading">Ownership</h2>
+    {% if domain.verified_at %}
+      <p><span class="badge s-pass">Verified</span> on {{ domain.verified_at|dt("%Y-%m-%d") }}</p>
+      <p class="small muted mb-0">Verified domains can be monitored on a schedule.</p>
+    {% else %}
+      <p><span class="badge s-not_checked">Not verified</span></p>
+      <p class="small">To prove you control this domain, add this DNS TXT record:</p>
+      <dl class="small">
+        <dt class="muted">Name</dt><dd><code>{{ domain.verification_record_name }}</code></dd>
+        <dt class="muted">Value</dt><dd><code>{{ domain.verification_record_value }}</code></dd>
+      </dl>
+      {% if ctx.can("member") %}
+      <form method="post" action="/domains/{{ domain.id }}/verify">{{ csrf() }}<button class="btn btn-sm" type="submit">Check verification</button></form>
+      {% endif %}
+    {% endif %}
+  </section>
+</div>
+
+<section class="card mt-lg" aria-labelledby="monitor-heading">
+  <h2 id="monitor-heading">Monitoring</h2>
+  {% if domain.monitor_enabled %}
+    <p>Scanned {{ intervals[domain.monitor_interval_hours]|lower }}. Next scan: {{ domain.next_scan_at|dt }}. You are alerted when a check gets worse.</p>
+  {% else %}
+    <p class="muted">Monitoring is off. {% if not domain.verified_at %}Verify ownership first to enable it.{% endif %}</p>
+  {% endif %}
+  {% if ctx.can("member") %}
+  <form method="post" action="/domains/{{ domain.id }}/monitoring" class="filters">
+    {{ csrf() }}
+    <div class="field"><label class="checkbox"><input type="checkbox" name="enabled" value="1" {% if domain.monitor_enabled %}checked{% endif %} {% if not domain.verified_at %}disabled{% endif %}><span>Enable scheduled scans</span></label></div>
+    <div class="field"><label for="interval">Interval</label>
+      <select id="interval" name="interval" {% if not domain.verified_at %}disabled{% endif %}>
+        {% for hours, label in intervals.items() %}<option value="{{ hours }}" {% if domain.monitor_interval_hours == hours %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></div>
+    <button class="btn" type="submit" {% if not domain.verified_at %}disabled{% endif %}>Save</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card mt-lg" aria-labelledby="scans-heading">
+  <div class="card-header"><h2 id="scans-heading">Scans</h2><a class="small" href="/scans?q={{ domain.hostname|urlencode }}">Open in scan history</a></div>
+  {% if scans %}
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Started</th><th scope="col">Status</th><th scope="col">Grade</th><th scope="col" class="num">Score</th><th scope="col">Source</th><th scope="col"><span class="visually-hidden">Report</span></th></tr></thead>
+    <tbody>
+    {% for scan in scans %}
+      <tr>
+        <td class="small">{{ scan.created_at|dt }}</td>
+        <td>{{ status_badge(scan.status) }}</td>
+        <td>{{ grade(scan.grade, "grade-sm") }}</td>
+        <td class="num">{{ scan.score_percentage ~ "%" if scan.score_percentage is not none else "–" }}</td>
+        <td class="small muted">{{ scan.source }}</td>
+        <td class="text-right"><a href="/scans/{{ scan.id }}">View</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+    <div class="empty"><p>This domain has not been scanned yet.</p></div>
+  {% endif %}
+</section>
+
+{% if ctx.can("admin") %}
+<section class="card mt-lg" aria-labelledby="danger-heading">
+  <h2 id="danger-heading">Delete domain</h2>
+  <p class="muted">Deletes the domain and all of its scan history and alerts. This cannot be undone.</p>
+  <form method="post" action="/domains/{{ domain.id }}/delete" data-confirm="Delete {{ domain.hostname }} and all of its scans? This cannot be undone.">
+    {{ csrf() }}<button class="btn btn-danger" type="submit">Delete {{ domain.hostname }}</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

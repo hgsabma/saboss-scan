@@ -1,0 +1,11 @@
+<div class="page-header"><div><h1>Settings</h1><p class="muted">Your account and the {{ ctx.organization.name }} organization.</p></div></div>
+<nav class="tabs" aria-label="Settings sections">
+  <a href="/settings" {% if tab == "account" %}aria-current="page"{% endif %}>Account</a>
+  <a href="/settings/organization" {% if tab == "organization" %}aria-current="page"{% endif %}>Organization</a>
+  {% if ctx.can("admin") %}
+  <a href="/settings/api-keys" {% if tab == "api-keys" %}aria-current="page"{% endif %}>API keys</a>
+  <a href="/settings/notifications" {% if tab == "notifications" %}aria-current="page"{% endif %}>Notifications</a>
+  <a href="/settings/audit" {% if tab == "audit" %}aria-current="page"{% endif %}>Audit log</a>
+  {% endif %}
+  <a href="/settings/api" {% if tab == "api" %}aria-current="page"{% endif %}>API docs</a>
+</nav>

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% from "_macros.html" import grade, status_badge, csrf with context %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="muted">Security posture of {{ ctx.organization.name }}.</p>
+  </div>
+  {% if ctx.can("member") %}<a class="btn btn-primary" href="/domains#add">Add domain</a>{% endif %}
+</div>
+
+{% if not domains %}
+  <div class="card empty">
+    <h2>Add your first domain</h2>
+    <p>Saboss Scan checks HTTPS, certificates, security headers, cookies and e-mail protection, and explains how to fix what it finds.</p>
+    {% if ctx.can("member") %}<a class="btn btn-primary" href="/domains#add">Add a domain</a>{% else %}<p class="small">Ask an admin of this organization to add a domain.</p>{% endif %}
+  </div>
+{% else %}
+  <div class="grid grid-4">
+    <div class="card stat">
+      <div class="label">Average score</div>
+      <div class="value">{% if stats.average_score is not none %}{{ stats.average_score }}%{% else %}–{% endif %}</div>
+      <div class="hint">Latest completed scan of {{ stats.scored_domains }} domain(s)</div>
+    </div>
+    <div class="card stat">
+      <div class="label">Domains</div>
+      <div class="value">{{ stats.domains }}</div>
+      <div class="hint">{{ stats.verified }} verified · {{ stats.monitored }} monitored</div>
+    </div>
+    <div class="card stat">
+      <div class="label">Scans (30 days)</div>
+      <div class="value">{{ stats.scans_30d }}</div>
+      <div class="hint"><a href="/scans">View scan history</a></div>
+    </div>
+    <div class="card stat">
+      <div class="label">Unread alerts</div>
+      <div class="value">{{ stats.unread_alerts }}</div>
+      <div class="hint"><a href="/alerts">View alerts</a></div>
+    </div>
+  </div>
+
+  <div class="grid grid-2 mt-lg">
+    <section class="card" aria-labelledby="domains-heading">
+      <div class="card-header"><h2 id="domains-heading">Domains</h2><a class="small" href="/domains">All domains</a></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th scope="col">Domain</th><th scope="col">Grade</th><th scope="col">Last scan</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+        <tbody>
+        {% for domain in domains[:8] %}
+          {% set scan = latest.get(domain.id) %}
+          <tr>
+            <td><a href="/domains/{{ domain.id }}">{{ domain.hostname }}</a></td>
+            <td>{{ grade(scan.grade if scan else None, "grade-sm") }}</td>
+            <td class="muted small">{{ scan.finished_at|dt if scan else "Never scanned" }}</td>
+            <td class="text-right">
+              {% if ctx.can("member") %}
+              <form method="post" action="/domains/{{ domain.id }}/scan" class="inline">{{ csrf() }}<button class="btn btn-sm" type="submit">Scan<span class="visually-hidden"> {{ domain.hostname }}</span></button></form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+
+    <section class="card" aria-labelledby="attention-heading">
+      <div class="card-header"><h2 id="attention-heading">Needs attention</h2></div>
+      {% if attention %}
+        <ul class="mb-0">
+        {% for scan in attention %}
+          <li><a href="/scans/{{ scan.id }}">{{ scan.hostname }}</a> — grade {{ scan.grade }} ({{ scan.score_percentage }}%)</li>
+        {% endfor %}
+        </ul>
+      {% elif latest %}
+        <p class="muted mb-0">No domain has a grade of D or E in its latest scan.</p>
+      {% else %}
+        <p class="muted mb-0">Run a scan to see which domains need attention.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="card mt-lg" aria-labelledby="recent-heading">
+    <div class="card-header"><h2 id="recent-heading">Recent scans</h2><a class="small" href="/scans">All scans</a></div>
+    {% if recent %}
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Domain</th><th scope="col">Status</th><th scope="col">Grade</th><th scope="col" class="num">Score</th><th scope="col">Started</th><th scope="col">By</th></tr></thead>
+      <tbody>
+      {% for scan in recent %}
+        <tr>
+          <td><a href="/scans/{{ scan.id }}">{{ scan.hostname }}</a></td>
+          <td>{{ status_badge(scan.status) }}</td>
+          <td>{{ grade(scan.grade, "grade-sm") }}</td>
+          <td class="num">{{ scan.score_percentage ~ "%" if scan.score_percentage is not none else "–" }}</td>
+          <td class="small muted">{{ scan.created_at|dt }}</td>
+          <td class="small muted">{{ scan.requested_by }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+      <p class="muted mb-0">No scans yet.</p>
+    {% endif %}
+  </section>
+{% endif %}
+{% endblock %}

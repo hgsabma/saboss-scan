@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<section class="card max-w-form" aria-labelledby="notify-heading">
+  <h2 id="notify-heading">Alert notifications</h2>
+  <p class="small muted">Alerts are always shown under <a href="/alerts">Alerts</a>. They can also be delivered by e-mail and webhook.</p>
+  <form method="post" action="/settings/notifications">
+    {{ csrf() }}
+    <div class="field">
+      <label class="checkbox"><input type="checkbox" name="notify_email" value="1" {% if ctx.organization.notify_email %}checked{% endif %}><span>E-mail owners and admins about new alerts</span></label>
+      {% if not email_configured %}<p class="hint">E-mail delivery is not configured on this server (SABOSS_SMTP_HOST and SABOSS_SMTP_FROM), so no e-mail will be sent until an administrator sets it up.</p>{% endif %}
+    </div>
+    <div class="field">
+      <label for="webhook_url">Webhook URL <span class="muted small">(optional)</span></label>
+      <input id="webhook_url" name="webhook_url" type="url" maxlength="500" placeholder="https://hooks.example.com/…" value="{{ ctx.organization.webhook_url or '' }}">
+      <p class="hint">Saboss sends a JSON POST for every alert. Only public https:// addresses are allowed.</p>
+    </div>
+    <button class="btn btn-primary" type="submit">Save</button>
+  </form>
+  {% if ctx.organization.webhook_url %}
+  <form method="post" action="/settings/notifications/test-webhook" class="mt">{{ csrf() }}<button class="btn" type="submit">Send a test webhook</button></form>
+  {% endif %}
+</section>
+{% endblock %}

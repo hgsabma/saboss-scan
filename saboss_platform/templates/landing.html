@@ -1,0 +1,27 @@
+{% extends "public_base.html" %}
+{% block title %}Website security checks{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>Know how secure your website's configuration is.</h1>
+  <p class="lead">Saboss Scan checks HTTPS, certificates, security headers, cookies and e-mail protection (SPF, DMARC, DKIM) for domains you own, explains every finding in plain language and tells you exactly what to fix.</p>
+  <div class="actions center">
+    <a class="btn btn-primary" href="/register">Create a free account</a>
+    <a class="btn" href="/login">Log in</a>
+  </div>
+  <div class="grid grid-3 features">
+    <div class="card">
+      <h2>Evidence, not guesses</h2>
+      <p class="muted">Every finding shows what was actually observed, why it matters and how confident the result is. Checks that could not run are never counted against you.</p>
+    </div>
+    <div class="card">
+      <h2>Transparent scoring</h2>
+      <p class="muted">A documented score from A to E with a breakdown per category. A high score means good configuration, not a guarantee of security.</p>
+    </div>
+    <div class="card">
+      <h2>Monitoring and alerts</h2>
+      <p class="muted">Verify domain ownership, schedule daily or weekly scans and get alerted when something gets worse.</p>
+    </div>
+  </div>
+  <p class="small muted mt-lg">Saboss Scan only performs passive checks, the same requests a browser or mail server makes. Only add domains you own or are authorized to assess.</p>
+</section>
+{% endblock %}

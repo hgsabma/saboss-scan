@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "_macros.html" import grade, status_badge, pagination with context %}
+{% block title %}Scans{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Scan history</h1>
+    <p class="muted">Every scan run by your organization, manually, through the API or by monitoring.</p>
+  </div>
+</div>
+<section class="card">
+  <form method="get" class="filters" role="search" aria-label="Filter scans">
+    <div class="field grow"><label for="q">Domain</label><input id="q" name="q" type="search" value="{{ q }}" placeholder="Domain contains…"></div>
+    <div class="field"><label for="status">Status</label>
+      <select id="status" name="status"><option value="">Any</option>
+        {% for s in states %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|capitalize }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="grade">Grade</label>
+      <select id="grade" name="grade"><option value="">Any</option>
+        {% for g in grades %}<option value="{{ g }}" {% if grade_filter == g %}selected{% endif %}>{{ g }}</option>{% endfor %}
+      </select></div>
+    <div class="field"><label for="sort">Sort</label>
+      <select id="sort" name="sort">
+        <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest first</option>
+        <option value="oldest" {% if sort == "oldest" %}selected{% endif %}>Oldest first</option>
+        <option value="score_asc" {% if sort == "score_asc" %}selected{% endif %}>Lowest score</option>
+        <option value="score_desc" {% if sort == "score_desc" %}selected{% endif %}>Highest score</option>
+      </select></div>
+    <button class="btn" type="submit">Apply</button>
+    {% if q or status or grade_filter or sort != "newest" %}<a class="btn btn-link" href="/scans">Clear filters</a>{% endif %}
+  </form>
+  <p class="small muted">{{ total }} scan{{ "" if total == 1 else "s" }}</p>
+  {% if scans %}
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Domain</th><th scope="col">Status</th><th scope="col">Grade</th><th scope="col" class="num">Score</th><th scope="col">Started</th><th scope="col">Source</th><th scope="col">Requested by</th></tr></thead>
+    <tbody>
+    {% for scan in scans %}
+      <tr>
+        <td><a href="/scans/{{ scan.id }}">{{ scan.hostname }}</a></td>
+        <td>{{ status_badge(scan.status) }}</td>
+        <td>{{ grade(scan.grade, "grade-sm") }}</td>
+        <td class="num">{{ scan.score_percentage ~ "%" if scan.score_percentage is not none else "–" }}</td>
+        <td class="small nowrap">{{ scan.created_at|dt }}</td>
+        <td class="small muted">{{ scan.source }}</td>
+        <td class="small muted">{{ scan.requested_by }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {{ pagination(request, page, pages) }}
+  {% elif q or status or grade_filter %}
+    <div class="empty"><p>No scans match these filters.</p><a href="/scans">Clear filters</a></div>
+  {% else %}
+    <div class="empty"><h2>No scans yet</h2><p><a href="/domains#add">Add a domain</a> to run your first scan.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

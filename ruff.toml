@@ -12,3 +12,7 @@ ignore = ["E501"]
 "tests/*" = ["S101", "S104", "S105", "S106", "E402"]
 # "PASS" is a finding status, not a password.
 "saboss_scan/findings.py" = ["S105"]
+
+[lint.flake8-bugbear]
+# FastAPI's dependency injection is designed to be used in argument defaults.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Form", "fastapi.params.Depends"]

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Account settings{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<div class="grid grid-2">
+  <section class="card" aria-labelledby="profile-heading">
+    <h2 id="profile-heading">Profile</h2>
+    <form method="post" action="/settings/profile">
+      {{ csrf() }}
+      <div class="field"><label for="name">Name</label><input id="name" name="name" type="text" maxlength="100" value="{{ ctx.user.name }}" required></div>
+      <div class="field"><label for="email">E-mail</label><input id="email" type="email" value="{{ ctx.user.email }}" disabled aria-describedby="email-hint"><p class="hint" id="email-hint">Your login e-mail cannot be changed yet.</p></div>
+      <button class="btn btn-primary" type="submit">Save profile</button>
+    </form>
+  </section>
+
+  <section class="card" aria-labelledby="password-heading">
+    <h2 id="password-heading">Change password</h2>
+    <form method="post" action="/settings/password">
+      {{ csrf() }}
+      <div class="field"><label for="current_password">Current password</label><input id="current_password" name="current_password" type="password" autocomplete="current-password" required></div>
+      <div class="field"><label for="new_password">New password</label><input id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="10" required><p class="hint">At least 10 characters. Other devices will be signed out.</p></div>
+      <button class="btn btn-primary" type="submit">Change password</button>
+    </form>
+  </section>
+</div>
+
+<section class="card mt-lg" aria-labelledby="orgs-heading">
+  <h2 id="orgs-heading">Your organizations</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Organization</th><th scope="col">Your role</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+    <tbody>
+    {% for m in memberships %}
+      <tr>
+        <td>{{ m.organization.name }}</td>
+        <td>{{ m.role|capitalize }}</td>
+        <td class="text-right">
+          {% if m.organization_id == ctx.organization.id %}<span class="badge s-pass">Current</span>
+          {% else %}
+          <form method="post" action="/settings/switch-organization" class="inline">{{ csrf() }}<input type="hidden" name="organization_id" value="{{ m.organization_id }}"><button class="btn btn-sm" type="submit">Switch</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <form method="post" action="/settings/organizations" class="filters mt">
+    {{ csrf() }}
+    <div class="field grow"><label for="org-name">New organization</label><input id="org-name" name="name" type="text" maxlength="100" placeholder="e.g. a client or a separate team" required></div>
+    <button class="btn" type="submit">Create organization</button>
+  </form>
+</section>
+{% endblock %}

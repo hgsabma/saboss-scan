@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% from "_macros.html" import grade, status_badge, severity_badge, meter_class, csrf with context %}
+{% block title %}Scan of {{ scan.hostname }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <p class="small muted mb-0"><a href="/scans">Scans</a> / <a href="/domains/{{ scan.domain_id }}">{{ scan.hostname }}</a> /</p>
+    <h1>Scan of {{ scan.hostname }}</h1>
+    <p class="muted">Requested {{ scan.created_at|dt }} by {{ scan.requested_by or "unknown" }} ({{ scan.source }}) · {{ status_badge(scan.status) }}</p>
+  </div>
+  {% if report %}
+  <div class="actions">
+    <a class="btn" href="/scans/{{ scan.id }}/report.pdf">Download PDF</a>
+    <a class="btn" href="/scans/{{ scan.id }}/report.json">JSON</a>
+    <a class="btn" href="/scans/{{ scan.id }}/report.html" target="_blank" rel="noopener">Shareable HTML</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if scan.status in ("queued", "running") %}
+  <section class="card" data-scan-status-url="/scans/{{ scan.id }}/status" aria-live="polite">
+    <h2>Scan in progress</h2>
+    <p class="muted">A scan usually takes 5–30 seconds. This page updates automatically.</p>
+    <ol class="progress-steps">
+      <li class="done">✓ Domain validated and authorized</li>
+      <li class="{{ 'done' if scan.status == 'running' else 'current' }}">{% if scan.status == 'queued' %}<span class="spinner" aria-hidden="true"></span>{% else %}✓{% endif %} Queued</li>
+      <li class="{{ 'current' if scan.status == 'running' else '' }}">{% if scan.status == 'running' %}<span class="spinner" aria-hidden="true"></span>{% endif %} <span data-status-label>{{ "Scanning" if scan.status == "running" else "Waiting to start" }}</span>: DNS, TLS, HTTP and e-mail checks</li>
+      <li>Scoring and recommendations</li>
+    </ol>
+    <noscript><p class="mt"><a class="btn" href="/scans/{{ scan.id }}">Refresh</a></p></noscript>
+  </section>
+
+{% elif scan.status == "failed" %}
+  <section class="card">
+    <h2>The scan could not be completed</h2>
+    <div class="alert alert-error" role="alert">{{ scan.error }}</div>
+    {% if ctx.can("member") %}
+    <form method="post" action="/domains/{{ scan.domain_id }}/scan">{{ csrf() }}<button class="btn btn-primary" type="submit">Try again</button></form>
+    {% endif %}
+  </section>
+
+{% elif report %}
+  {% set score = report.score %}
+  <div class="grid grid-3">
+    <section class="card" aria-labelledby="summary-heading">
+      <h2 id="summary-heading">Executive summary</h2>
+      <div class="flex-between">
+        {{ grade(score.grade, "grade-lg") }}
+        <div class="text-right">
+          <div class="stat"><div class="value">{{ score.percentage if score.percentage is not none else "–" }}{% if score.percentage is not none %}%{% endif %}</div></div>
+          <div class="small muted">{{ score.earned }} of {{ score.possible }} points</div>
+        </div>
+      </div>
+      <p class="mt small">
+        {{ score.counts.fail }} failed · {{ score.counts.warning }} warnings · {{ score.counts.pass }} passed{% if score.counts.not_checked %} · {{ score.counts.not_checked }} not checked{% endif %}.
+      </p>
+      {% if score.critical_failed %}<div class="alert alert-error small mb-0">A critical check failed, so the grade is capped at E.</div>
+      {% elif score.high_risk_failed %}<div class="alert alert-warn small mb-0">A high-severity check failed, so the grade is capped at D.</div>{% endif %}
+    </section>
+
+    <section class="card" aria-labelledby="categories-heading">
+      <h2 id="categories-heading">Categories</h2>
+      {% for key, title in categories.items() %}
+        {% set points = score.categories.get(key) %}
+        {% if points %}
+        <div class="category-row">
+          <span class="small">{{ title }}</span>
+          <progress class="bar {{ meter_class(points.earned, points.possible) }}" max="{{ points.possible or 1 }}" value="{{ points.earned if points.possible else 0 }}" aria-label="{{ title }}: {{ points.earned }} of {{ points.possible }} points"></progress>
+          <span class="small text-right">{{ points.earned }}/{{ points.possible }}</span>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </section>
+
+    <section class="card" aria-labelledby="confidence-heading">
+      <h2 id="confidence-heading">Confidence</h2>
+      <p class="stat"><span class="value">{{ score.coverage }}%</span></p>
+      <p class="small muted mb-0">{{ score.checks_completed }} of {{ score.checks_total }} applicable checks completed. Checks that could not run are excluded from the score instead of counted as failures.</p>
+    </section>
+  </div>
+
+  {% if comparison and comparison.previous_scan_id %}
+  <section class="card mt-lg" aria-labelledby="changes-heading">
+    <h2 id="changes-heading">Changes since the <a href="/scans/{{ comparison.previous_scan_id }}">previous scan</a></h2>
+    {% if not comparison.new_issues and not comparison.resolved %}
+      <p class="muted mb-0">No findings changed{% if comparison.score_change %}; the score changed by {{ "%+d"|format(comparison.score_change) }} points{% endif %}.</p>
+    {% else %}
+      {% if comparison.score_change %}<p>Score change: <strong>{{ "%+d"|format(comparison.score_change) }}</strong> percentage points (grade {{ comparison.grade_before }} → {{ comparison.grade_after }}).</p>{% endif %}
+      <div class="grid grid-2">
+        <div><h3>Got worse ({{ comparison.new_issues|length }})</h3>
+          {% if comparison.new_issues %}<ul>{% for i in comparison.new_issues %}<li>{{ i.title }}: {{ i.before }} → <strong>{{ i.after }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Nothing.</p>{% endif %}</div>
+        <div><h3>Improved ({{ comparison.resolved|length }})</h3>
+          {% if comparison.resolved %}<ul>{% for i in comparison.resolved %}<li>{{ i.title }}: {{ i.before }} → <strong>{{ i.after }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Nothing.</p>{% endif %}</div>
+      </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  <section class="card mt-lg" aria-labelledby="recs-heading">
+    <h2 id="recs-heading">What to fix first</h2>
+    {% if report.recommendations %}
+      <ol class="mb-0">{% for r in report.recommendations %}<li>{{ r }}</li>{% endfor %}</ol>
+    {% else %}
+      <p class="muted mb-0">No issues were found in the checked settings.</p>
+    {% endif %}
+  </section>
+
+  <section class="card mt-lg" aria-labelledby="findings-heading">
+    <div class="card-header"><h2 id="findings-heading">Technical findings</h2><span class="small muted">{{ findings|length }} shown</span></div>
+    <form method="get" class="filters" aria-label="Filter findings">
+      <div class="field"><label for="f-status">Status</label>
+        <select id="f-status" name="status"><option value="">Any</option>
+          {% for s in statuses %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s|replace("_", " ")|capitalize }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="f-severity">Severity</label>
+        <select id="f-severity" name="severity"><option value="">Any</option>
+          {% for s in severities %}<option value="{{ s }}" {% if filters.severity == s %}selected{% endif %}>{{ s|capitalize }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="f-category">Category</label>
+        <select id="f-category" name="category"><option value="">Any</option>
+          {% for key, title in categories.items() %}<option value="{{ key }}" {% if filters.category == key %}selected{% endif %}>{{ title }}</option>{% endfor %}
+        </select></div>
+      <button class="btn" type="submit">Filter</button>
+      {% if filters.status or filters.severity or filters.category %}<a class="btn btn-link" href="/scans/{{ scan.id }}">Show all</a>{% endif %}
+    </form>
+    <p class="small muted"><strong>Observed</strong> is what the scanner actually saw. <strong>Why it matters</strong> is the inferred risk. Heuristic checks are educated guesses.</p>
+    {% if findings %}
+      {% for f in findings %}
+      <article class="finding">
+        <div>{{ status_badge(f.status) }}</div>
+        <div>
+          <div class="title">{{ f.title }} {{ severity_badge(f.severity) }}{% if f.confidence == "heuristic" %} <span class="badge s-not_checked">Heuristic</span>{% endif %}</div>
+          {% if f.detail and f.status != "pass" %}<p class="small mb-0">{{ f.detail }}</p>{% endif %}
+          <dl>
+            {% if f.evidence %}<dt>Observed</dt><dd class="mono">{{ f.evidence }}</dd>{% endif %}
+            {% if f.explanation and f.status in ("fail", "warning") %}<dt>Why it matters</dt><dd>{{ f.explanation }}</dd>{% endif %}
+            {% if f.recommendation and f.status in ("fail", "warning") %}<dt>How to fix</dt><dd>{{ f.recommendation }}</dd>{% endif %}
+          </dl>
+        </div>
+      </article>
+      {% endfor %}
+    {% else %}
+      <div class="empty"><p>No findings match these filters.</p></div>
+    {% endif %}
+  </section>
+
+  <section class="card mt-lg" aria-labelledby="scope-heading">
+    <h2 id="scope-heading">Scope, methodology and limitations</h2>
+    <p class="small">Engine {{ report.version }} · scanned {{ report.scanned_at }} · authorization confirmed by {{ scan.domain.authorization_confirmed_by }}.</p>
+    <p class="small">Scoring: critical 20, high 10, medium 5, low 2 points; info is not scored. Pass earns full points, warning half, fail none. Checks that could not run or do not apply are excluded. Grades: A ≥ 85%, B ≥ 70%, C ≥ 55%, D ≥ 40%, otherwise E. A failed critical check caps the grade at E, a failed high check at D.</p>
+    <ul class="small mb-0">{% for item in report.limitations %}<li>{{ item }}</li>{% endfor %}</ul>
+  </section>
+{% endif %}
+{% endblock %}

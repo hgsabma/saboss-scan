@@ -6,3 +6,6 @@ __pycache__/
 # Scan reports can contain information about real domains; keep them local.
 *.json
 reports/
+
+# Local database
+data/

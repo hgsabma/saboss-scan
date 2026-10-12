@@ -13,6 +13,7 @@ TLS certificate for the hostname, so the website cannot tell the difference.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
@@ -129,6 +130,56 @@ def _fetch_once(url: str, timeout: float) -> HttpResponse:
         raise FetchError("Could not connect.") from None
     except (urllib3.exceptions.ConnectTimeoutError, urllib3.exceptions.ReadTimeoutError):
         raise FetchError("The request timed out.", retryable=True) from None
+    except urllib3.exceptions.HTTPError as exc:
+        raise FetchError(f"Request failed ({type(exc).__name__}).") from None
+    finally:
+        pool.close()
+
+
+def post_json(url: str, payload: dict, timeout: float = 5) -> int:
+    """POST JSON to a public HTTPS URL (used for webhooks). Returns the status code.
+
+    Uses the same protections as fetch(): the host must resolve to public
+    addresses only, and the connection is pinned to the checked address.
+    Redirects are not followed.
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if parsed.scheme != "https" or not hostname or parsed.port not in (None, 443) or parsed.username:
+        raise FetchError("Webhook URLs must be https:// addresses on the default port.")
+
+    ip = resolve_public_ip(hostname)  # may raise UnsafeTargetError
+    if ip is None:
+        raise FetchError("The domain name could not be resolved.")
+
+    path = (parsed.path or "/") + (f"?{parsed.query}" if parsed.query else "")
+    body = json.dumps(payload).encode("utf-8")
+    pool = _make_pool("https", ip, hostname, timeout)
+    try:
+        response = pool.urlopen(
+            "POST",
+            path,
+            body=body,
+            headers={
+                "Host": hostname,
+                "User-Agent": USER_AGENT,
+                "Content-Type": "application/json",
+            },
+            redirect=False,
+            retries=False,
+            preload_content=False,
+            assert_same_host=False,
+        )
+        try:
+            return response.status
+        finally:
+            response.release_conn()
+    except urllib3.exceptions.SSLError:
+        raise FetchError("TLS/certificate error.") from None
+    except urllib3.exceptions.NewConnectionError:
+        raise FetchError("Could not connect.") from None
+    except (urllib3.exceptions.ConnectTimeoutError, urllib3.exceptions.ReadTimeoutError):
+        raise FetchError("The request timed out.") from None
     except urllib3.exceptions.HTTPError as exc:
         raise FetchError(f"Request failed ({type(exc).__name__}).") from None
     finally:

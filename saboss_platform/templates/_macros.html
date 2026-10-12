@@ -1,0 +1,36 @@
+{% macro grade(value, size="") -%}
+  {%- if value and value != "N/A" -%}
+    <span class="grade grade-{{ value }} {{ size }}" role="img" aria-label="Grade {{ value }}">{{ value }}</span>
+  {%- else -%}
+    <span class="grade {{ size }}" role="img" aria-label="No grade">–</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+  {%- set labels = {"pass": "Pass", "warning": "Warning", "fail": "Fail", "not_checked": "Not checked",
+                    "not_applicable": "Not applicable", "queued": "Queued", "running": "Running",
+                    "completed": "Completed", "failed": "Failed"} -%}
+  <span class="badge s-{{ status }}">{{ labels.get(status, status) }}</span>
+{%- endmacro %}
+
+{% macro severity_badge(severity) -%}
+  <span class="badge sev-{{ severity }}">{{ severity|capitalize }}</span>
+{%- endmacro %}
+
+{% macro csrf() -%}
+  <input type="hidden" name="{{ CSRF_FIELD }}" value="{{ csrf_token }}">
+{%- endmacro %}
+
+{% macro meter_class(earned, possible) -%}
+  {%- if not possible -%}{%- elif earned / possible >= 0.8 -%}good{%- elif earned / possible >= 0.5 -%}mid{%- else -%}bad{%- endif -%}
+{%- endmacro %}
+
+{% macro pagination(request, page, pages) -%}
+  {% if pages > 1 %}
+  <nav class="pagination" aria-label="Pagination">
+    {% if page > 1 %}<a class="btn btn-sm" href="{{ query(request, page=page - 1) }}">← Previous</a>{% endif %}
+    <span class="muted">Page {{ page }} of {{ pages }}</span>
+    {% if page < pages %}<a class="btn btn-sm" href="{{ query(request, page=page + 1) }}">Next →</a>{% endif %}
+  </nav>
+  {% endif %}
+{%- endmacro %}

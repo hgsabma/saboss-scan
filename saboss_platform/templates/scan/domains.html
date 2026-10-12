@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import grade, csrf with context %}
+{% block title %}Domains{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Domains</h1>
+    <p class="muted">Domains your organization is authorized to assess.</p>
+  </div>
+</div>
+
+{% if ctx.can("member") %}
+<section class="card" id="add" aria-labelledby="add-heading">
+  <h2 id="add-heading">Add a domain</h2>
+  <form method="post" action="/domains" class="max-w-form">
+    {{ csrf() }}
+    <div class="field">
+      <label for="hostname">Domain</label>
+      <input id="hostname" name="hostname" type="text" placeholder="example.com" required maxlength="253" autocomplete="off" inputmode="url">
+    </div>
+    <div class="field">
+      <label class="checkbox"><input type="checkbox" name="authorized" value="1" required>
+        <span>I own this domain or have explicit permission to assess its security. Saboss Scan only makes ordinary, passive requests, but you are responsible for scanning only what you are authorized to.</span></label>
+    </div>
+    <div class="field">
+      <label class="checkbox"><input type="checkbox" name="scan_now" value="1" checked><span>Run a first scan right away</span></label>
+    </div>
+    <button class="btn btn-primary" type="submit">Add domain</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="card" aria-labelledby="list-heading">
+  <div class="card-header"><h2 id="list-heading">All domains</h2><span class="muted small">{{ domains|length }} shown</span></div>
+  <form method="get" class="filters" role="search">
+    <div class="field grow"><label for="q">Search</label><input id="q" name="q" type="search" value="{{ q }}" placeholder="Domain contains…"></div>
+    <div class="field"><label for="sort">Sort by</label>
+      <select id="sort" name="sort">
+        <option value="name" {% if sort == "name" %}selected{% endif %}>Name</option>
+        <option value="newest" {% if sort == "newest" %}selected{% endif %}>Newest</option>
+        <option value="score" {% if sort == "score" %}selected{% endif %}>Lowest score first</option>
+      </select></div>
+    <button class="btn" type="submit">Apply</button>
+    {% if q or sort != "name" %}<a class="btn btn-link" href="/domains">Clear</a>{% endif %}
+  </form>
+  {% if domains %}
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Domain</th><th scope="col">Grade</th><th scope="col" class="num">Score</th><th scope="col">Ownership</th><th scope="col">Monitoring</th><th scope="col">Last scan</th></tr></thead>
+    <tbody>
+    {% for domain in domains %}
+      {% set scan = latest.get(domain.id) %}
+      <tr>
+        <td><a href="/domains/{{ domain.id }}">{{ domain.hostname }}</a></td>
+        <td>{{ grade(scan.grade if scan else None, "grade-sm") }}</td>
+        <td class="num">{{ scan.score_percentage ~ "%" if scan and scan.score_percentage is not none else "–" }}</td>
+        <td>{% if domain.verified_at %}<span class="badge s-pass">Verified</span>{% else %}<span class="badge s-not_checked">Not verified</span>{% endif %}</td>
+        <td class="small">{% if domain.monitor_enabled %}{{ "Daily" if domain.monitor_interval_hours == 24 else "Weekly" }}{% else %}<span class="muted">Off</span>{% endif %}</td>
+        <td class="small muted">{{ scan.finished_at|dt if scan else "Never" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% elif q %}
+    <div class="empty"><p>No domains match “{{ q }}”.</p></div>
+  {% else %}
+    <div class="empty"><h2>No domains yet</h2><p>Add a domain above to run your first scan.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

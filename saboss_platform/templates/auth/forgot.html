@@ -1,0 +1,24 @@
+{% extends "public_base.html" %}
+{% block title %}Reset password{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>Reset your password</h1>
+  {% if sent %}
+    <div class="alert alert-success mt" role="status">{{ message }}</div>
+  {% else %}
+    <p class="muted mt">Enter the e-mail address of your account and we will send you a reset link.</p>
+    <form method="post" action="/forgot-password" novalidate>
+      <input type="hidden" name="{{ CSRF_FIELD }}" value="{{ csrf_token }}">
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+      </div>
+      <button class="btn btn-primary" type="submit">Send reset link</button>
+    </form>
+  {% endif %}
+  {% if not email_configured %}
+    <p class="small muted mt">Note: e-mail delivery is not configured on this installation, so reset links cannot be sent. Contact your administrator.</p>
+  {% endif %}
+  <p class="small mt"><a href="/login">Back to log in</a></p>
+</div>
+{% endblock %}

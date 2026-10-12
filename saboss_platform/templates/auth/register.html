@@ -1,0 +1,35 @@
+{% extends "public_base.html" %}
+{% block title %}Create account{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>Create your account</h1>
+  {% if not registration_open %}
+    <div class="alert alert-info mt">Registration is closed on this Saboss installation. Ask an administrator to add you.</div>
+  {% else %}
+  <p class="muted mt">You get your own organization. You can invite colleagues later.</p>
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/register" novalidate>
+    <input type="hidden" name="{{ CSRF_FIELD }}" value="{{ csrf_token }}">
+    <div class="field">
+      <label for="name">Your name</label>
+      <input id="name" name="name" type="text" autocomplete="name" required maxlength="100" value="{{ form.name if form else '' }}">
+    </div>
+    <div class="field">
+      <label for="email">E-mail</label>
+      <input id="email" name="email" type="email" autocomplete="email" required maxlength="254" value="{{ form.email if form else '' }}">
+    </div>
+    <div class="field">
+      <label for="organization">Organization name <span class="muted small">(optional)</span></label>
+      <input id="organization" name="organization" type="text" autocomplete="organization" maxlength="100" value="{{ form.organization if form else '' }}">
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10" aria-describedby="password-hint">
+      <p class="hint" id="password-hint">At least 10 characters. A passphrase of several words is easy to remember and hard to guess.</p>
+    </div>
+    <button class="btn btn-primary" type="submit">Create account</button>
+  </form>
+  <p class="small mt">Already have an account? <a href="/login">Log in</a></p>
+  {% endif %}
+</div>
+{% endblock %}

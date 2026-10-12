@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Saboss Scan{% endblock %} · Saboss</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<div class="public">
+  <header class="public-header">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">S</span><span>Saboss Scan</span></a>
+    <nav class="actions">{% block header_actions %}<a class="btn btn-sm" href="/login">Log in</a><a class="btn btn-sm btn-primary" href="/register">Create account</a>{% endblock %}</nav>
+  </header>
+  <main id="main" class="public-main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="public-header small muted"><span>Saboss Technologies — Building the Future. Securing the World.</span><span>v{{ version }}</span></footer>
+</div>
+</body>
+</html>

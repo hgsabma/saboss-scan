@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}API documentation{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+<section class="card">
+  <h2>Saboss Scan API v1</h2>
+  <p>Authenticate with an organization API key{% if ctx.can("admin") %} (create one under <a href="/settings/api-keys">API keys</a>){% else %} (an admin can create one){% endif %}. Keys with scan access can add domains and start scans; read-only keys can list and read.</p>
+  <p>The machine-readable specification is at <a href="/api/openapi.json"><code>/api/openapi.json</code></a> (OpenAPI 3).</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Method</th><th scope="col">Path</th><th scope="col">Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/v1/domains</code></td><td>List domains (<code>page</code>, <code>per_page</code> ≤ 100)</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/domains</code></td><td>Add a domain: <code>{"hostname": "example.com", "authorized": true}</code></td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/domains/{id}</code></td><td>Get one domain</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/scans</code></td><td>List scans (<code>domain_id</code>, <code>status</code>, <code>page</code>, <code>per_page</code>)</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/v1/scans</code></td><td>Start a scan: <code>{"domain_id": 1}</code> → 202 Accepted</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/scans/{id}</code></td><td>Scan status and full report when completed</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/v1/scans/{id}/report.pdf</code></td><td>PDF report</td></tr>
+    </tbody>
+  </table></div>
+  <h3 class="mt-lg">Example</h3>
+<pre class="code">curl -s -X POST {{ base_url }}/api/v1/scans \
+  -H "Authorization: Bearer $SABOSS_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"domain_id": 1}'
+
+curl -s {{ base_url }}/api/v1/scans/42 -H "Authorization: Bearer $SABOSS_API_KEY"</pre>
+  <h3 class="mt-lg">Errors and limits</h3>
+  <p class="mb-0">Errors are returned as <code>{"error": {"code": "...", "message": "..."}}</code> with codes such as <code>unauthorized</code>, <code>forbidden</code>, <code>not_found</code>, <code>conflict</code>, <code>validation_error</code> and <code>rate_limited</code>. Each key may make 120 requests per minute; each organization may start {{ request.app.state.settings.scans_per_org_per_hour }} scans per hour.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}Organization{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+{% if ctx.can("admin") %}
+<section class="card" aria-labelledby="rename-heading">
+  <h2 id="rename-heading">Organization name</h2>
+  <form method="post" action="/settings/organization" class="filters">
+    {{ csrf() }}
+    <div class="field grow"><label for="org-name">Name</label><input id="org-name" name="name" type="text" maxlength="100" value="{{ ctx.organization.name }}" required></div>
+    <button class="btn" type="submit">Rename</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="card mt-lg" aria-labelledby="members-heading">
+  <h2 id="members-heading">Members</h2>
+  <p class="small muted">Roles: <strong>Owner</strong> manages everything including owners and admins. <strong>Admin</strong> manages members, API keys, notifications and deletes domains. <strong>Member</strong> adds domains and runs scans. <strong>Viewer</strong> can only view.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Person</th><th scope="col">Role</th><th scope="col">Joined</th>{% if ctx.can("admin") %}<th scope="col"><span class="visually-hidden">Actions</span></th>{% endif %}</tr></thead>
+    <tbody>
+    {% for m in members %}
+      <tr>
+        <td>{{ m.user.name }}<br><span class="small muted">{{ m.user.email }}</span></td>
+        <td>
+          {% if ctx.can("admin") %}
+          <form method="post" action="/settings/members/{{ m.id }}/role" class="actions">
+            {{ csrf() }}
+            <label class="visually-hidden" for="role-{{ m.id }}">Role of {{ m.user.email }}</label>
+            <select id="role-{{ m.id }}" name="role">{% for r in roles %}<option value="{{ r }}" {% if m.role == r %}selected{% endif %}>{{ r|capitalize }}</option>{% endfor %}</select>
+            <button class="btn btn-sm" type="submit">Update</button>
+          </form>
+          {% else %}{{ m.role|capitalize }}{% endif %}
+        </td>
+        <td class="small muted">{{ m.created_at|dt("%Y-%m-%d") }}</td>
+        {% if ctx.can("admin") %}
+        <td class="text-right">
+          <form method="post" action="/settings/members/{{ m.id }}/remove" class="inline" data-confirm="Remove {{ m.user.email }} from {{ ctx.organization.name }}?">{{ csrf() }}<button class="btn btn-sm btn-danger" type="submit">Remove</button></form>
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{% if ctx.can("admin") %}
+<section class="card mt-lg" aria-labelledby="add-member-heading">
+  <h2 id="add-member-heading">Add a member</h2>
+  <p class="small muted">The person needs a Saboss account first. E-mail invitations are planned.</p>
+  <form method="post" action="/settings/members" class="filters">
+    {{ csrf() }}
+    <div class="field grow"><label for="member-email">E-mail</label><input id="member-email" name="email" type="email" required></div>
+    <div class="field"><label for="member-role">Role</label>
+      <select id="member-role" name="role"><option value="member">Member</option><option value="viewer">Viewer</option>{% if ctx.role == "owner" %}<option value="admin">Admin</option>{% endif %}</select></div>
+    <button class="btn btn-primary" type="submit">Add member</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

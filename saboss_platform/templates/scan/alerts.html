@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_macros.html" import severity_badge, csrf with context %}
+{% block title %}Alerts{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Alerts</h1>
+    <p class="muted">Created when a monitored domain gets worse between two scans.</p>
+  </div>
+  <div class="actions">
+    <a class="btn btn-sm {% if show != 'unread' %}btn-primary{% endif %}" href="/alerts">All</a>
+    <a class="btn btn-sm {% if show == 'unread' %}btn-primary{% endif %}" href="/alerts?show=unread">Unread</a>
+    {% if alerts %}<form method="post" action="/alerts/read" class="inline">{{ csrf() }}<button class="btn btn-sm" type="submit">Mark all as read</button></form>{% endif %}
+  </div>
+</div>
+<section class="card">
+  {% if alerts %}
+    {% for alert in alerts %}
+    <article class="finding">
+      <div>{{ severity_badge(alert.severity) }}{% if not alert.read_at %} <span class="badge s-queued">New</span>{% endif %}</div>
+      <div>
+        <div class="title"><a href="/scans/{{ alert.scan_id }}">{{ alert.title }}</a></div>
+        <p class="small muted mb-0">{{ alert.created_at|dt }}</p>
+        <ul class="small">{% for line in alert.message.split("\n") %}<li>{{ line|replace("- ", "", 1) }}</li>{% endfor %}</ul>
+        <p class="small muted mb-0">Delivery: {{ alert.delivery or "in-app only" }}</p>
+      </div>
+    </article>
+    {% endfor %}
+  {% else %}
+    <div class="empty">
+      <h2>No alerts{% if show == "unread" %} to read{% endif %}</h2>
+      <p>Enable monitoring on a verified domain. Saboss Scan compares each scheduled scan with the previous one and alerts you when something gets worse.</p>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

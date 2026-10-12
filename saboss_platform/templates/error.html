@@ -1,0 +1,10 @@
+{% extends "public_base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block header_actions %}<a class="btn btn-sm" href="/dashboard">Go to dashboard</a>{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>{{ title }}</h1>
+  <p class="muted mt">{{ message }}</p>
+  <a class="btn" href="/dashboard">Back to Saboss Scan</a>
+</div>
+{% endblock %}

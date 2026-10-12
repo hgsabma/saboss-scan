@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "_macros.html" import csrf with context %}
+{% block title %}API keys{% endblock %}
+{% block content %}
+{% include "settings/_tabs.html" %}
+{% if new_key %}
+<div class="alert alert-success" role="status">
+  <strong>Your new API key.</strong> Copy it now: it is shown only once and cannot be recovered.
+  <div class="keybox mt"><code>{{ new_key }}</code></div>
+</div>
+{% endif %}
+<section class="card" aria-labelledby="create-key-heading">
+  <h2 id="create-key-heading">Create an API key</h2>
+  <form method="post" action="/settings/api-keys" class="filters">
+    {{ csrf() }}
+    <div class="field grow"><label for="key-name">Name</label><input id="key-name" name="name" type="text" maxlength="100" placeholder="e.g. CI pipeline" required></div>
+    <div class="field"><label for="key-role">Access</label>
+      <select id="key-role" name="role"><option value="member">Scan (add domains, start scans)</option><option value="viewer">Read only</option></select></div>
+    <button class="btn btn-primary" type="submit">Create key</button>
+  </form>
+</section>
+<section class="card mt-lg" aria-labelledby="keys-heading">
+  <h2 id="keys-heading">Keys</h2>
+  {% if keys %}
+  <div class="table-wrap"><table>
+    <thead><tr><th scope="col">Name</th><th scope="col">Key</th><th scope="col">Access</th><th scope="col">Created</th><th scope="col">Last used</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+    <tbody>
+    {% for key in keys %}
+      <tr>
+        <td>{{ key.name }}</td>
+        <td><code>{{ key.prefix }}…</code></td>
+        <td>{{ "Scan" if key.role == "member" else "Read only" }}</td>
+        <td class="small muted">{{ key.created_at|dt("%Y-%m-%d") }}</td>
+        <td class="small muted">{{ key.last_used_at|dt if key.last_used_at else "Never" }}</td>
+        <td class="text-right">
+          {% if key.revoked_at %}<span class="badge s-not_checked">Revoked</span>
+          {% else %}<form method="post" action="/settings/api-keys/{{ key.id }}/revoke" class="inline" data-confirm="Revoke {{ key.name }}? Programs using it will stop working.">{{ csrf() }}<button class="btn btn-sm btn-danger" type="submit">Revoke</button></form>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+    <div class="empty"><p>No API keys yet. See <a href="/settings/api">API docs</a> for how to use them.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

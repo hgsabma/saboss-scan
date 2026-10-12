@@ -1,0 +1,23 @@
+{% extends "public_base.html" %}
+{% block title %}Choose a new password{% endblock %}
+{% block content %}
+<div class="card auth-card">
+  <h1>Choose a new password</h1>
+  {% if invalid %}
+    <div class="alert alert-error mt" role="alert">This reset link is invalid or has expired. Reset links work once and for one hour.</div>
+    <a class="btn" href="/forgot-password">Request a new link</a>
+  {% else %}
+    {% if error %}<div class="alert alert-error mt" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="/reset-password" novalidate class="mt">
+      <input type="hidden" name="{{ CSRF_FIELD }}" value="{{ csrf_token }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <div class="field">
+        <label for="password">New password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="10">
+        <p class="hint">At least 10 characters. You will be signed out on all devices.</p>
+      </div>
+      <button class="btn btn-primary" type="submit">Change password</button>
+    </form>
+  {% endif %}
+</div>
+{% endblock %}
